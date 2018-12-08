@@ -1,4 +1,4 @@
-from abc import ABCMeta
+from abc import ABC
 
 from lxml.etree import ElementTree
 
@@ -6,7 +6,7 @@ from gpptx.types.color import Color
 from gpptx.types.xml_node import XmlNode
 
 
-class Fill(XmlNode, metaclass=ABCMeta):
+class Fill(XmlNode, ABC):
     pass
 
 
@@ -17,6 +17,9 @@ class SolidFill(Fill):
 
     @property
     def xml(self) -> ElementTree:
+        raise NotImplementedError  # TODO
+
+    def save_xml(self) -> None:
         raise NotImplementedError  # TODO
 
     @property
@@ -31,6 +34,9 @@ class GradientFill(Fill):
 
     @property
     def xml(self) -> ElementTree:
+        raise NotImplementedError  # TODO
+
+    def save_xml(self) -> None:
         raise NotImplementedError  # TODO
 
     @property

@@ -5,32 +5,36 @@ from lxml.etree import ElementTree
 from gpptx.pptx_tools.colors import SYSTEM_COLOR_NAMES
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorators import cache_persist, CacheDecoratable
+from gpptx.storage.cache.decorators import cache_persist
 from gpptx.storage.storage import PresentationStorage
-from gpptx.types.slide import SlideMaster
-from gpptx.types.xml_node import XmlNode
+from gpptx.types.xml_node import CacheDecoratableXmlNode
 
 
-class Theme(CacheDecoratable, XmlNode):
+class Theme(CacheDecoratableXmlNode):
     __slots__ = ('_xml_path', '_slide_master')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, xml_path: str, slide_master: SlideMaster):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, xml_path: str, slide_master):
+        from gpptx.types.slide import SlideMaster
+
         super().__init__()
         self._storage = storage
         self._storage_cache_key = cache_key
         self._xml_path = xml_path
-        self._slide_master = slide_master
+        self._slide_master: SlideMaster = slide_master
 
     @property
     def xml(self) -> ElementTree:
         return self._storage.loader.get_file_xml(self._xml_path)
+
+    def save_xml(self) -> None:
+        return self._storage.loader.save_file_xml(self._xml_path, self.xml)
 
     @cache_persist
     @property
     def color_rgbs(self) -> Dict[str, str]:
         result: Dict[str, str] = dict()
 
-        for elem in self.xml.xpath('a:themeElements/a:clrScheme/*', namespaces=pptx_xml_ns):
+        for elem in self.xml.xpath('a:themeElements[1]/a:clrScheme[1]/*', namespaces=pptx_xml_ns):
             standard_address_and_tag_name = str(elem.tag)
             tag_name = standard_address_and_tag_name.split('}')[1]
             color = elem[0].get('val')

@@ -24,6 +24,9 @@ class SlidesCollection(CacheDecoratable):
         for i in range(self._slides_count):
             yield Slide(self._storage, self._storage_cache_key, make_slide_path(i))
 
+    def __len__(self):
+        return self._slides_count
+
     def delete(self, index: int, do_garbage_collection: bool = True) -> None:
         delete_slide(loader=self._storage.loader, slide_index=make_pptx_index(index),
                      do_garbage_collection=do_garbage_collection)

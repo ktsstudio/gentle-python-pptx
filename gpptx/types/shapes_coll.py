@@ -1,5 +1,6 @@
 from typing import Union, Any, List, Optional, Dict
-from xml.etree import ElementTree
+
+from lxml.etree import ElementTree
 
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
@@ -7,18 +8,18 @@ from gpptx.storage.cache.decorators import cache_local, CacheDecoratable, cache_
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.shape import Shape, GroupShape, ShapeType, TextShape, PatternShape, PatternType, ImageShape, \
     PlaceholderShape, UnknownShape
-from gpptx.types.slide import SlideLike
 
 
 class ShapesCollection(CacheDecoratable):
     __slots__ = ('_shape_xmls', '_slide')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xmls: List[ElementTree],
-                 slide: SlideLike):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xmls: List[ElementTree], slide):
+        from gpptx.types.slide import SlideLike
+
         self._storage = storage
         self._storage_cache_key = cache_key
         self._shape_xmls = shape_xmls
-        self._slide = slide
+        self._slide: SlideLike = slide
 
     def __getitem__(self, shape_id: int) -> Shape:
         shape = self.get(shape_id)
@@ -29,6 +30,9 @@ class ShapesCollection(CacheDecoratable):
     def __iter__(self):
         for shape_index in range(len(self._shape_xmls)):
             yield self._make_shape(self._get_shape_type(shape_index), shape_index)
+
+    def __len__(self):
+        return len(self._shape_xmls)
 
     def get(self, shape_id: int, default=None) -> Union[Shape, Any]:
         return self.flatten_as_dict(keep_groups=True).get(shape_id, default=default)
@@ -97,15 +101,15 @@ class ShapesCollection(CacheDecoratable):
         if has_tx_body:
             return ShapeType.TEXT
 
-        has_solid_fill = len(shape_xml.xpath('p:spPr/a:solidFill[1]', namespaces=pptx_xml_ns)) == 1
+        has_solid_fill = len(shape_xml.xpath('p:spPr[1]/a:solidFill[1]', namespaces=pptx_xml_ns)) == 1
         if has_solid_fill:
             return ShapeType.PATTERN_SOLID
 
-        has_grad_fill = len(shape_xml.xpath('p:spPr/a:gradFill[1]', namespaces=pptx_xml_ns)) == 1
+        has_grad_fill = len(shape_xml.xpath('p:spPr[1]/a:gradFill[1]', namespaces=pptx_xml_ns)) == 1
         if has_grad_fill:
             return ShapeType.PATTERN_GRADIENT
 
-        has_placeholder = len(shape_xml.xpath('p:nvSpPr/p:nvPr/p:ph[1]', namespaces=pptx_xml_ns)) == 1
+        has_placeholder = len(shape_xml.xpath('p:nvSpPr[1]/p:nvPr[1]/p:ph[1]', namespaces=pptx_xml_ns)) == 1
         if has_placeholder:
             return ShapeType.PLACEHOLDER
 

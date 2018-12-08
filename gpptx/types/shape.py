@@ -1,20 +1,19 @@
-from abc import ABCMeta
+from abc import ABC
 from enum import Enum
 from typing import Optional, List
-from xml.etree import ElementTree
+
+from lxml.etree import ElementTree
 
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorators import cache_persist, cache_local, CacheDecoratable
+from gpptx.storage.cache.decorators import cache_persist, cache_local
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.color_resolver import ColorResolver
 from gpptx.types.emu import Emu
 from gpptx.types.fill import Fill
 from gpptx.types.image import Image
-from gpptx.types.shapes_coll import ShapesCollection
-from gpptx.types.slide import SlideLike
 from gpptx.types.text import TextFrame
-from gpptx.types.xml_node import XmlNode
+from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.list import first_or_none
 
 
@@ -28,23 +27,27 @@ class ShapeType(Enum):
     UNKNOWN = 7
 
 
-class Shape(CacheDecoratable, XmlNode, metaclass=ABCMeta):
-    __slots__ = ('_shape_xml', '_slide')
+class Shape(CacheDecoratableXmlNode, ABC):
+    __slots__ = ('_shape_xml', '_slide_like')
     
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide: SlideLike):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide_like):
+
         super().__init__()
         self._storage = storage
         self._storage_cache_key = cache_key
         self._shape_xml = shape_xml
-        self._slide = slide
+        self._slide_like_like = slide_like
 
     @property
     def xml(self) -> ElementTree:
         return self._shape_xml
-    
+
+    def save_xml(self) -> None:
+        self.slide.save_xml()
+
     @property
-    def slide(self) -> SlideLike:
-        return self._slide
+    def slide(self):
+        return self._slide_like
 
     @property
     def shape_type(self) -> ShapeType:
@@ -114,7 +117,7 @@ class Shape(CacheDecoratable, XmlNode, metaclass=ABCMeta):
     @cache_local
     @property
     def _c_nv_pr(self) -> Optional[ElementTree]:
-        return first_or_none(self._shape_xml.xpath('p:nvSpPr/p:cNvPr[1]', namespaces=pptx_xml_ns))
+        return first_or_none(self._shape_xml.xpath('p:nvSpPr[1]/p:cNvPr[1]', namespaces=pptx_xml_ns))
 
     @cache_local
     @property
@@ -139,8 +142,8 @@ class Shape(CacheDecoratable, XmlNode, metaclass=ABCMeta):
 class TextShape(Shape):
     __slots__ = ()
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide: SlideLike):
-        super().__init__(storage, cache_key, shape_xml, slide)
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide_like):
+        super().__init__(storage, cache_key, shape_xml, slide_like)
 
     @property
     def shape_type(self) -> ShapeType:
@@ -148,7 +151,7 @@ class TextShape(Shape):
 
     @property
     def text_frame(self) -> TextFrame:
-        return TextFrame(self._storage, self._storage_cache_key.make_son('text_frame'), self._tx_body)
+        return TextFrame(self._storage, self._storage_cache_key.make_son('text_frame'), self._tx_body, self)
 
     @cache_local
     @property
@@ -164,9 +167,9 @@ class PatternType(Enum):
 class PatternShape(Shape):
     __slots__ = ('_pattern_type',)
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide: SlideLike,
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide_like,
                  pattern_type: PatternType):
-        super().__init__(storage, cache_key, shape_xml, slide)
+        super().__init__(storage, cache_key, shape_xml, slide_like)
         self._pattern_type = pattern_type
 
     @property
@@ -184,8 +187,8 @@ class PatternShape(Shape):
 class ImageShape(Shape):
     __slots__ = ()
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide: SlideLike):
-        super().__init__(storage, cache_key, shape_xml, slide)
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide_like):
+        super().__init__(storage, cache_key, shape_xml, slide_like)
 
     @property
     def shape_type(self) -> ShapeType:
@@ -199,17 +202,20 @@ class ImageShape(Shape):
 class GroupShape(Shape):
     __slots__ = ()
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide: SlideLike):
-        super().__init__(storage, cache_key, shape_xml, slide)
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide_like):
+        super().__init__(storage, cache_key, shape_xml, slide_like)
 
     @property
     def shape_type(self) -> ShapeType:
         return ShapeType.GROUP
 
     @property
-    def shapes(self) -> ShapesCollection:
+    def shapes(self):
+        from gpptx.types.shapes_coll import ShapesCollection
+
         return ShapesCollection(self._storage, self._storage_cache_key.make_son('shapes'), self._shape_xmls, self._slide)
 
+    @cache_persist
     @property
     def children_offset_x(self) -> Emu:
         if self._xfrm_ch_off is not None:
@@ -218,6 +224,7 @@ class GroupShape(Shape):
                 return Emu(int(x_str))
         return Emu(0)
 
+    @cache_persist
     @property
     def children_offset_y(self) -> Emu:
         if self._xfrm_ch_off is not None:
@@ -236,7 +243,7 @@ class GroupShape(Shape):
     @cache_local
     @property
     def _shape_xmls(self) -> List[ElementTree]:
-        return list(self.xml.xpath('./*/p:spPr/..', namespaces=pptx_xml_ns))
+        return self.xml.xpath('./*/p:spPr[1]/..', namespaces=pptx_xml_ns)
 
 
 class PlaceholderType(Enum):
@@ -262,8 +269,8 @@ class PlaceholderType(Enum):
 class PlaceholderShape(Shape):
     __slots__ = ()
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide: SlideLike):
-        super().__init__(storage, cache_key, shape_xml, slide)
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide_like):
+        super().__init__(storage, cache_key, shape_xml, slide_like)
 
     @property
     def shape_type(self) -> ShapeType:
@@ -311,8 +318,8 @@ class PlaceholderShape(Shape):
 class UnknownShape(Shape):
     __slots__ = ()
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide: SlideLike):
-        super().__init__(storage, cache_key, shape_xml, slide)
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml: ElementTree, slide_like):
+        super().__init__(storage, cache_key, shape_xml, slide_like)
 
     @property
     def shape_type(self) -> ShapeType:

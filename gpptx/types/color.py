@@ -1,4 +1,4 @@
-from abc import ABCMeta
+from abc import ABC
 from colorsys import hls_to_rgb, rgb_to_hls
 from enum import Enum
 from typing import Tuple
@@ -21,7 +21,7 @@ class ColorType(Enum):
     UNKNOWN = 5
 
 
-class Color(XmlNode, metaclass=ABCMeta):
+class Color(XmlNode, ABC):
     @property
     def rgb_str(self) -> str:
         raise NotImplementedError
@@ -39,6 +39,9 @@ class SrgbColor(Color):
     @property
     def xml(self) -> ElementTree:
         return self._srgb_clr_xml
+
+    def save_xml(self) -> None:
+        raise NotImplementedError
 
     @property
     def rgb_str(self) -> str:
@@ -59,6 +62,9 @@ class HslColor(Color):
     @property
     def xml(self) -> ElementTree:
         return self._hsl_clr_xml
+
+    def save_xml(self) -> None:
+        raise NotImplementedError
 
     @property
     def rgb_str(self) -> str:
@@ -84,6 +90,9 @@ class PresetColor(Color):
     def xml(self) -> ElementTree:
         return self._prst_clr_xml
 
+    def save_xml(self) -> None:
+        raise NotImplementedError
+
     @property
     def rgb_str(self) -> str:
         color_name = self.xml.attriVb['val']
@@ -105,6 +114,9 @@ class SchemeColor(Color):
     @property
     def xml(self) -> ElementTree:
         return self._scheme_clr_xml
+
+    def save_xml(self) -> None:
+        raise NotImplementedError
 
     @property
     def rgb_str(self) -> str:
@@ -128,6 +140,9 @@ class UnknownColor(Color):
     def xml(self) -> ElementTree:
         return self._clr_xml
 
+    def save_xml(self) -> None:
+        raise NotImplementedError
+
     @property
     def rgb_str(self) -> str:
         return '000000'
@@ -144,6 +159,9 @@ class NoneColor(Color):
     @property
     def xml(self) -> ElementTree:
         return None
+
+    def save_xml(self) -> None:
+        raise NotImplementedError
 
     @property
     def rgb_str(self) -> str:

@@ -1,4 +1,4 @@
-from abc import ABCMeta
+from abc import ABC
 from io import BytesIO
 
 from lxml.etree import ElementTree
@@ -6,7 +6,7 @@ from lxml.etree import ElementTree
 from gpptx.types.xml_node import XmlNode
 
 
-class Image(XmlNode, metaclass=ABCMeta):
+class Image(XmlNode, ABC):
     @property
     def blob(self) -> bytes:
         raise NotImplementedError
@@ -23,6 +23,9 @@ class RasterImage(Image):
 
     @property
     def xml(self) -> ElementTree:
+        raise NotImplementedError  # TODO
+
+    def save_xml(self) -> None:
         raise NotImplementedError  # TODO
 
     @property
@@ -44,6 +47,9 @@ class VectorImage(Image):
 
     @property
     def xml(self) -> ElementTree:
+        raise NotImplementedError  # TODO
+
+    def save_xml(self) -> None:
         raise NotImplementedError  # TODO
 
     @property

@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import List, Optional, Union, Any
 
+from lxml import etree
 from lxml.etree import ElementTree
 
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
@@ -9,18 +10,23 @@ from gpptx.storage.cache.decorators import cache_local, cache_persist, CacheDeco
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.color import Color, NoneColor
 from gpptx.types.emu import Emu
-from gpptx.types.shape import Shape
-from gpptx.types.xml_node import XmlNode
+from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.list import first_or_none
 
 
-class Align(Enum):
+class HorizontalAlign(Enum):
     LEFT = 1
     CENTER = 2
     RIGHT = 3
 
 
-class Run(CacheDecoratable, XmlNode):
+class VerticalAlign(Enum):
+    TOP = 1
+    CENTER = 2
+    BOTTOM = 3
+
+
+class Run(CacheDecoratableXmlNode):
     _DEFAULT_FONT_SIZE = Emu.from_pt(16)
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, run_xml: ElementTree, paragraph):
@@ -34,6 +40,9 @@ class Run(CacheDecoratable, XmlNode):
     def xml(self) -> ElementTree:
         return self._run_xml
 
+    def save_xml(self) -> None:
+        self._paragraph.save_xml()
+
     @property
     def paragraph(self):
         return self._paragraph
@@ -45,10 +54,19 @@ class Run(CacheDecoratable, XmlNode):
     @cache_persist
     @property
     def text(self) -> str:
-        t = first_or_none(self.xml.xpath('a:t[1]', namespaces=pptx_xml_ns))
-        if t is not None:
-            return ''.join(t.itertext())
+        if self._t is not None:
+            return ''.join(self._t.itertext())
         return ''
+
+    @text.setter
+    def text(self, v: str) -> None:
+        if self._t is None:
+            xml_str = '<a:t></a:t>'
+            new_xml = etree.fromstring(xml_str)
+            self.xml.append(new_xml)
+            raise NotImplementedError  # TODO clear cache
+        self._t.text = v
+        self._paragraph.save_xml()
 
     @cache_persist
     @property
@@ -108,6 +126,11 @@ class Run(CacheDecoratable, XmlNode):
         return first_or_none(self.xml.xpath('a:rPr[1]', namespaces=pptx_xml_ns))
 
     @cache_local
+    @property
+    def _t(self) -> Optional[ElementTree]:
+        return first_or_none(self.xml.xpath('a:t[1]', namespaces=pptx_xml_ns))
+
+    @cache_local
     def _get_color(self) -> Optional[Color]:
         fill_xml = self._get_elem('a:solidFill')
         if fill_xml is not None:
@@ -143,7 +166,61 @@ class Run(CacheDecoratable, XmlNode):
         return None
 
 
-class Paragraph(CacheDecoratable, XmlNode):
+class RunCollection(CacheDecoratable):
+    __slots__ = ('_run_xmls', '_paragraph')
+
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey,
+                 run_xmls: List[ElementTree], paragraph):
+        self._storage = storage
+        self._storage_cache_key = cache_key
+        self._run_xmls = run_xmls
+        self._paragraph: Paragraph = paragraph
+
+    def __getitem__(self, index: int) -> Run:
+        return Run(self._storage, self._storage_cache_key.make_son(str(index)), self._run_xmls[index], self._paragraph)
+
+    def __iter__(self):
+        for i, xml in enumerate(self._run_xmls):
+            yield Run(self._storage, self._storage_cache_key.make_son(str(i)), xml, self._paragraph)
+
+    def __len__(self):
+        return len(self._run_xmls)
+
+    def add_run(self, new_xml: ElementTree = None) -> Run:
+        # create
+        if new_xml is None:
+            xml_str = """
+                <a:r>
+                    <a:rPr></a:rPr>
+                    <a:t></a:t>
+                </a:r>
+            """
+            new_xml = etree.fromstring(xml_str)
+
+        self._paragraph.xml.append(new_xml)
+        self._paragraph.save_xml()
+
+        # update cache
+        self._run_xmls.append(new_xml)  # because it is a pointer
+
+        # make run object
+        new_run_index = len(self._run_xmls) - 1
+        return Run(self._storage, self._storage_cache_key.make_son(str(new_run_index)), new_xml, self._paragraph)
+
+    def delete_run(self, index: int) -> None:
+        # delete
+        self._paragraph.xml.remove(self._run_xmls[index])
+        self._paragraph.save_xml()
+
+        # update cache
+        for i in range(index, len(self._run_xmls)):
+            run_cache = self._storage_cache_key.make_son(str(i))
+            self._storage.cacher.delete_from_any_cache(run_cache)
+
+        self._run_xmls.pop(index)
+
+
+class Paragraph(CacheDecoratableXmlNode):
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, paragraph_xml: ElementTree, text_frame):
         super().__init__()
         self._storage = storage
@@ -155,19 +232,16 @@ class Paragraph(CacheDecoratable, XmlNode):
     def xml(self) -> ElementTree:
         return self._paragraph_xml
 
+    def save_xml(self) -> None:
+        self._text_frame.save_xml()
+
     @property
     def text_frame(self):
         return self._text_frame
 
     @property
-    def runs(self) -> List[Run]:
-        return [Run(self._storage, self._storage_cache_key, xml, self) for xml in self._run_xmls]
-
-    def add_run(self) -> Run:
-        raise NotImplementedError  # TODO
-
-    def delete_run(self, index: int) -> None:
-        raise NotImplementedError  # TODO
+    def runs(self) -> RunCollection:
+        return RunCollection(self._storage, self._storage_cache_key.make_son('runs'), self._run_xmls, self)
 
     @property
     def text(self) -> str:
@@ -175,28 +249,28 @@ class Paragraph(CacheDecoratable, XmlNode):
 
     @cache_persist
     @property
-    def align(self) -> Optional[Align]:
+    def align(self) -> Optional[HorizontalAlign]:
         if self._p_pr is not None:
             align_str = self._p_pr.get('algn')
             if align_str == 'l':
-                return Align.LEFT
+                return HorizontalAlign.LEFT
             elif align_str == 'ctr':
-                return Align.CENTER
+                return HorizontalAlign.CENTER
             elif align_str == 'r':
-                return Align.RIGHT
+                return HorizontalAlign.RIGHT
         if self.do_use_defaults_when_null:
-            return Align.LEFT
+            return HorizontalAlign.LEFT
         return None
 
     @cache_persist
     @property
     def line_height(self) -> Union[float, Emu, None]:
-        ln_spc_spc_pct = first_or_none(self.xml.xpath('a:lnSpc/a:spcPct[1]', namespaces=pptx_xml_ns))
+        ln_spc_spc_pct = first_or_none(self.xml.xpath('a:lnSpc[1]/a:spcPct[1]', namespaces=pptx_xml_ns))
         if ln_spc_spc_pct is not None:
             val_str = ln_spc_spc_pct.get('val')
             if val_str is not None:
                 return int(val_str)
-        ln_spc_spc_pts = first_or_none(self.xml.xpath('a:lnSpc/a:spcPts[1]', namespaces=pptx_xml_ns))
+        ln_spc_spc_pts = first_or_none(self.xml.xpath('a:lnSpc[1]/a:spcPts[1]', namespaces=pptx_xml_ns))
         if ln_spc_spc_pts is not None:
             val_str = ln_spc_spc_pct.get('val')
             if val_str is not None:
@@ -230,7 +304,7 @@ class Paragraph(CacheDecoratable, XmlNode):
     @cache_persist
     @property
     def margin_top(self) -> Optional[Emu]:
-        spc_bef_spc_pts = first_or_none(self.xml.xpath('a:spcBef/a:spcPts[1]', namespaces=pptx_xml_ns))
+        spc_bef_spc_pts = first_or_none(self.xml.xpath('a:spcBef[1]/a:spcPts[1]', namespaces=pptx_xml_ns))
         if spc_bef_spc_pts is not None:
             val = spc_bef_spc_pts.get('val')
             if val is not None:
@@ -241,8 +315,8 @@ class Paragraph(CacheDecoratable, XmlNode):
 
     @cache_persist
     @property
-    def margin_down(self) -> Optional[Emu]:
-        spc_aft_spc_pts = first_or_none(self.xml.xpath('a:spcAft/a:spcPts[1]', namespaces=pptx_xml_ns))
+    def margin_bottom(self) -> Optional[Emu]:
+        spc_aft_spc_pts = first_or_none(self.xml.xpath('a:spcAft[1]/a:spcPts[1]', namespaces=pptx_xml_ns))
         if spc_aft_spc_pts is not None:
             val = spc_aft_spc_pts.get('val')
             if val is not None:
@@ -267,33 +341,82 @@ class Paragraph(CacheDecoratable, XmlNode):
         return self.xml.xpath('a:r', namespaces=pptx_xml_ns)
 
 
-class TextFrame(CacheDecoratable, XmlNode):
+class ParagraphCollection(CacheDecoratable):
+    __slots__ = ('_paragraph_xmls', '_text_frame')
+
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey,
+                 paragraph_xmls: List[ElementTree], text_frame):
+        self._storage = storage
+        self._storage_cache_key = cache_key
+        self._paragraph_xmls = paragraph_xmls
+        self._text_frame: TextFrame = text_frame
+
+    def __getitem__(self, index: int) -> Paragraph:
+        return Paragraph(self._storage, self._storage_cache_key.make_son(str(index)), self._paragraph_xmls[index],
+                         self._text_frame)
+
+    def __iter__(self):
+        for i, xml in enumerate(self._paragraph_xmls):
+            yield Paragraph(self._storage, self._storage_cache_key.make_son(str(i)), xml, self._text_frame)
+
+    def __len__(self):
+        return len(self._paragraph_xmls)
+
+    def add_paragraph(self, new_xml: ElementTree = None) -> Paragraph:
+        # create
+        if new_xml is None:
+            raise NotImplementedError  # TODO
+
+        self._text_frame.xml.append(new_xml)
+        self._text_frame.save_xml()
+
+        # update cache
+        self._text_frame.xml.append(new_xml)  # because it is a pointer
+
+        # make run object
+        new_paragraph_index = len(self._paragraph_xmls) - 1
+        return Paragraph(self._storage, self._storage_cache_key.make_son(str(new_paragraph_index)), new_xml,
+                         self._text_frame)
+
+    def delete_run(self, index: int) -> None:
+        # delete
+        self._text_frame.xml.remove(self._paragraph_xmls[index])
+
+        # update cache
+        for i in range(index, len(self._paragraph_xmls)):
+            run_cache = self._storage_cache_key.make_son(str(i))
+            self._storage.cacher.delete_from_any_cache(run_cache)
+
+        self._paragraph_xmls.pop(index)
+
+
+class TextFrame(CacheDecoratableXmlNode):
     __slots__ = ('_txbody_xml', '_shape')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, txbody_xml: ElementTree, shape: Shape):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, txbody_xml: ElementTree, shape):
+        from gpptx.types.shape import Shape
+
         super().__init__()
         self._storage = storage
         self._storage_cache_key = cache_key
         self._txbody_xml = txbody_xml
-        self._shape = shape
+        self._shape: Shape = shape
 
     @property
     def xml(self) -> ElementTree:
         return self._txbody_xml
 
+    def save_xml(self) -> None:
+        self._shape.save_xml()
+
     @property
-    def shape(self) -> Shape:
+    def shape(self):
         return self._shape
 
     @property
-    def paragraphs(self) -> List[Paragraph]:
-        return [Paragraph(self._storage, self._storage_cache_key, xml, self) for xml in self._paragraph_xmls]
-
-    def add_paragraph(self) -> Paragraph:
-        raise NotImplementedError  # TODO
-
-    def delete_paragraph(self, index: int) -> None:
-        raise NotImplementedError  # TODO
+    def paragraphs(self) -> ParagraphCollection:
+        return ParagraphCollection(self._storage, self._storage_cache_key.make_son('paragraphs'),
+                                   self._paragraph_xmls, self)
 
     @property
     def text(self) -> str:
@@ -330,13 +453,41 @@ class TextFrame(CacheDecoratable, XmlNode):
         return None
 
     @cache_persist
-    def margin_down(self) -> Optional[Emu]:
+    def margin_bottom(self) -> Optional[Emu]:
         if self._body_pr is not None:
             b_ins_str = self._body_pr.get('bIns')
             if b_ins_str is not None:
                 return Emu(int(b_ins_str))
         if self.do_use_defaults_when_null:
             return Emu(0)
+        return None
+
+    @cache_persist
+    def vertical_align(self) -> Optional[VerticalAlign]:
+        if self._body_pr is not None:
+            anchor_str = self._body_pr.get('anchor')
+            if anchor_str is not None:
+                if anchor_str == 't':
+                    return VerticalAlign.TOP
+                elif anchor_str == 'ctr':
+                    return VerticalAlign.CENTER
+                elif anchor_str == 'b':
+                    return VerticalAlign.BOTTOM
+        if self.do_use_defaults_when_null:
+            return VerticalAlign.TOP
+        return None
+
+    @cache_persist
+    def do_word_wrap(self) -> Optional[bool]:
+        if self._body_pr is not None:
+            wrap_str = self._body_pr.get('wrap')
+            if wrap_str is not None:
+                if wrap_str == 'square':
+                    return True
+                elif wrap_str == 'node':
+                    return False
+        if self.do_use_defaults_when_null:
+            return True
         return None
 
     @cache_local
@@ -347,7 +498,7 @@ class TextFrame(CacheDecoratable, XmlNode):
     @cache_local
     @property
     def _list_def_r_pr(self) -> Optional[ElementTree]:
-        return first_or_none(self.xml.xpath('a:lstStyle/a:lvl1pPr/a:defRPr[1]', namespaces=pptx_xml_ns))
+        return first_or_none(self.xml.xpath('a:lstStyle[1]/a:lvl1pPr[1]/a:defRPr[1]', namespaces=pptx_xml_ns))
 
     @cache_local
     @property

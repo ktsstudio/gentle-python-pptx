@@ -1,14 +1,15 @@
-from xml.etree import ElementTree
+from lxml.etree import ElementTree
 
 from gpptx.types.color import ColorType, Color, SrgbColor, HslColor, PresetColor, SchemeColor, UnknownColor
-from gpptx.types.shape import Shape
 
 
 class ColorResolver:
     __slots__ = ('_shape',)
 
-    def __init__(self, shape: Shape):
-        self._shape = shape
+    def __init__(self, shape):
+        from gpptx.types.shape import Shape
+
+        self._shape: Shape = shape
 
     def make_color(self, xml: ElementTree) -> Color:
         color_type = self._get_color_type(xml)

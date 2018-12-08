@@ -1,4 +1,4 @@
-from abc import ABCMeta
+from abc import ABC
 from typing import List
 
 from lxml.etree import ElementTree
@@ -8,14 +8,14 @@ from gpptx.pptx_tools.paths import make_rels_path, SLIDE_LAYOUTS_PATH_PREFIX, \
 from gpptx.pptx_tools.rels import find_first_relation_path_with_prefix
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorators import cache_local, CacheDecoratable, cache_persist
+from gpptx.storage.cache.decorators import cache_local, cache_persist
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.shapes_coll import ShapesCollection
 from gpptx.types.theme import Theme
-from gpptx.types.xml_node import XmlNode
+from gpptx.types.xml_node import CacheDecoratableXmlNode
 
 
-class SlideLike(CacheDecoratable, XmlNode, metaclass=ABCMeta):
+class SlideLike(CacheDecoratableXmlNode, ABC):
     __slots__ = ()
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey):
@@ -34,7 +34,7 @@ class SlideLike(CacheDecoratable, XmlNode, metaclass=ABCMeta):
     @cache_local
     @property
     def _shape_xmls(self) -> List[ElementTree]:
-        return list(self.xml.xpath('p:cSld/p:spTree/*', namespaces=pptx_xml_ns))
+        return self.xml.xpath('p:cSld/p:spTree/*', namespaces=pptx_xml_ns)
 
 
 class SlideMaster(SlideLike):
@@ -49,6 +49,9 @@ class SlideMaster(SlideLike):
     @property
     def xml(self) -> ElementTree:
         return self._storage.loader.get_file_xml(self._xml_path)
+
+    def save_xml(self) -> None:
+        return self._storage.loader.save_file_xml(self._xml_path, self.xml)
 
     @property
     def theme(self) -> Theme:
@@ -75,6 +78,9 @@ class SlideLayout(SlideLike):
     @property
     def xml(self) -> ElementTree:
         return self._storage.loader.get_file_xml(self._xml_path)
+
+    def save_xml(self) -> None:
+        return self._storage.loader.save_file_xml(self._xml_path, self.xml)
 
     @property
     def slide_master(self) -> SlideMaster:
@@ -104,6 +110,9 @@ class Slide(SlideLike):
     @property
     def xml(self) -> ElementTree:
         return self._storage.loader.get_file_xml(self._xml_path)
+
+    def save_xml(self) -> None:
+        return self._storage.loader.save_file_xml(self._xml_path, self.xml)
 
     @property
     def slide_layout(self) -> SlideLayout:

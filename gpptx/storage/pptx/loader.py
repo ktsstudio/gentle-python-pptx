@@ -53,7 +53,7 @@ class Loader:
         new_loader._all_files = self._all_files
         new_loader._deleted_files = copy.deepcopy(self._deleted_files)
 
-        new_loader._xml_cache = self._xml_cache
+        new_loader._xml_cache = dict()
         new_loader._changed_files_cache = copy.deepcopy(self._changed_files_cache)
         new_loader._changed_xml_cache = copy.deepcopy(self._changed_xml_cache)
 
