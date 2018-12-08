@@ -3,7 +3,7 @@ from contextlib import contextmanager
 
 from lxml.etree import ElementTree
 
-from gpptx.storage.cache.decorators import CacheDecoratable
+from gpptx.storage.cache.decorator import CacheDecoratable
 
 
 class BaseXmlNode(ABC):

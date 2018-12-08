@@ -8,7 +8,7 @@ from gpptx.pptx_tools.paths import make_rels_path, SLIDE_LAYOUTS_PATH_PREFIX, \
 from gpptx.pptx_tools.rels import find_first_relation_path_with_prefix
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorators import cache_local, cache_persist
+from gpptx.storage.cache.decorator import cache_local, cache_persist
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.shapes_coll import ShapesCollection
 from gpptx.types.theme import Theme

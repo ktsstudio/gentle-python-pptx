@@ -5,7 +5,7 @@ from lxml.etree import ElementTree
 from gpptx.pptx_tools.colors import SYSTEM_COLOR_NAMES
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorators import cache_persist
+from gpptx.storage.cache.decorator import cache_persist
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.xml_node import CacheDecoratableXmlNode
 

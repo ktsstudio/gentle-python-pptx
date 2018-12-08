@@ -4,7 +4,7 @@ from lxml.etree import ElementTree
 
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorators import cache_local, CacheDecoratable, cache_persist
+from gpptx.storage.cache.decorator import cache_local, CacheDecoratable, cache_persist
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.shape import Shape, GroupShape, ShapeType, TextShape, PatternShape, PatternType, ImageShape, \
     PlaceholderShape, UnknownShape

@@ -6,7 +6,7 @@ from lxml.etree import ElementTree
 
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorators import cache_persist, cache_local
+from gpptx.storage.cache.decorator import cache_persist, cache_local
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.color_resolver import ColorResolver
 from gpptx.types.emu import Emu
