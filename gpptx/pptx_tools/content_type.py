@@ -2,8 +2,9 @@ from typing import Optional
 
 from lxml import etree
 
-from gpptx.pptx_tools.paths import CONTENT_TYPES_PATH, SLIDES_PATH_PREFIX, SLIDE_MASTERS_PATH_PREFIX, \
-    SLIDE_LAYOUTS_PATH_PREFIX, THEMES_PATH_PREFIX
+from gpptx.pptx_tools.paths import CONTENT_TYPES_PATH, SLIDES_PATH_PREFIX_WITH_FILE, \
+    SLIDE_MASTERS_PATH_PREFIX_WITH_FILE, \
+    SLIDE_LAYOUTS_PATH_PREFIX_WITH_FILE, THEMES_PATH_PREFIX_WITH_FILE
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.pptx.loader import Loader
 
@@ -35,13 +36,13 @@ def delete_mention_in_content_type(loader: Loader, filepath: str) -> None:
 
 
 def detect_content_type_by_filepath(filepath: str) -> Optional[str]:
-    if filepath.startswith(SLIDES_PATH_PREFIX):
+    if filepath.startswith(SLIDES_PATH_PREFIX_WITH_FILE):
         return 'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'
-    elif filepath.startswith(SLIDE_MASTERS_PATH_PREFIX):
+    elif filepath.startswith(SLIDE_MASTERS_PATH_PREFIX_WITH_FILE):
         return 'application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml'
-    elif filepath.startswith(SLIDE_LAYOUTS_PATH_PREFIX):
+    elif filepath.startswith(SLIDE_LAYOUTS_PATH_PREFIX_WITH_FILE):
         return 'application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml'
-    elif filepath.startswith(THEMES_PATH_PREFIX):
+    elif filepath.startswith(THEMES_PATH_PREFIX_WITH_FILE):
         return 'application/vnd.openxmlformats-officedocument.theme+xml'
     else:
         return None

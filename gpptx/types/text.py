@@ -6,7 +6,8 @@ from lxml.etree import ElementTree
 
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorator import cache_local, cache_persist, CacheDecoratable
+from gpptx.storage.cache.decorator import cache_local, CacheDecoratable, cache_persist_property, \
+    cache_local_property
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.color import Color, NoneColor
 from gpptx.types.emu import Emu
@@ -51,8 +52,7 @@ class Run(CacheDecoratableXmlNode):
     def text_frame(self):
         return self._paragraph.text_frame
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def text(self) -> str:
         if self._t is not None:
             return ''.join(self._t.itertext())
@@ -61,31 +61,35 @@ class Run(CacheDecoratableXmlNode):
     @text.setter
     def text(self, v: str) -> None:
         if self._t is None:
-            xml_str = '<a:t></a:t>'
-            new_xml = etree.fromstring(xml_str)
+            new_xml = etree.Element('{%s}t' % pptx_xml_ns['a'])
             self.xml.append(new_xml)
-            raise NotImplementedError  # TODO clear cache
+            self._t.clear_cache()
         self._t.text = v
         self._paragraph.save_xml()
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def font_name(self) -> Optional[str]:
         latin_xml = self._get_elem('a:latin')
         if latin_xml is not None:
             return latin_xml.get('typeface')
         return None
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def font_size(self) -> Optional[Emu]:
         sz_str = self._get_attrib('sz')
         if sz_str is not None:
             return Emu.from_centripoints(int(sz_str))
         return self._DEFAULT_FONT_SIZE
 
-    @cache_persist
-    @property
+    @font_size.cache_serializer
+    def font_size(self, v: Emu) -> int:
+        return int(v)
+
+    @font_size.cache_unserializer
+    def font_size(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_persist_property
     def color_rgb(self) -> Optional[str]:
         color = self._get_color()
         if color is not None:
@@ -94,8 +98,7 @@ class Run(CacheDecoratableXmlNode):
             return '000000'
         return None
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def color_alpha(self) -> Optional[float]:
         color = self._get_color()
         if color is not None:
@@ -104,29 +107,25 @@ class Run(CacheDecoratableXmlNode):
             return 1
         return None
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def is_bold(self) -> Optional[bool]:
         b_str = self._get_attrib('b')
         if b_str is not None:
             return bool(b_str)
         return False
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def is_italic(self) -> Optional[bool]:
         i_str = self._get_attrib('i')
         if i_str is not None:
             return bool(i_str)
         return False
 
-    @cache_local
-    @property
+    @cache_local_property
     def _r_pr(self) -> Optional[ElementTree]:
         return first_or_none(self.xml.xpath('a:rPr[1]', namespaces=pptx_xml_ns))
 
-    @cache_local
-    @property
+    @cache_local_property
     def _t(self) -> Optional[ElementTree]:
         return first_or_none(self.xml.xpath('a:t[1]', namespaces=pptx_xml_ns))
 
@@ -134,9 +133,10 @@ class Run(CacheDecoratableXmlNode):
     def _get_color(self) -> Optional[Color]:
         fill_xml = self._get_elem('a:solidFill')
         if fill_xml is not None:
-            clr_xml = next(iter(fill_xml))
-            color_resolver = self.paragraph.text_frame.shape.color_resolver
-            return color_resolver.make_color(clr_xml)
+            clr_xml = first_or_none(list(fill_xml))
+            if clr_xml is not None:
+                color_resolver = self.paragraph.text_frame.shape.color_resolver
+                return color_resolver.make_color(clr_xml)
         if self.do_use_defaults_when_null:
             return NoneColor()
         return None
@@ -189,13 +189,11 @@ class RunCollection(CacheDecoratable):
     def add_run(self, new_xml: ElementTree = None) -> Run:
         # create
         if new_xml is None:
-            xml_str = """
-                <a:r>
-                    <a:rPr></a:rPr>
-                    <a:t></a:t>
-                </a:r>
-            """
-            new_xml = etree.fromstring(xml_str)
+            new_xml = etree.Element('{%s}r' % pptx_xml_ns['a'])
+            new_xml_r_pr = etree.Element('{%s}rPr' % pptx_xml_ns['a'])
+            new_xml.append(new_xml_r_pr)
+            new_xml_t = etree.Element('{%s}t' % pptx_xml_ns['a'])
+            new_xml.append(new_xml_t)
 
         self._paragraph.xml.append(new_xml)
         self._paragraph.save_xml()
@@ -247,8 +245,7 @@ class Paragraph(CacheDecoratableXmlNode):
     def text(self) -> str:
         return ' '.join(r.text for r in self.runs)
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def align(self) -> Optional[HorizontalAlign]:
         if self._p_pr is not None:
             align_str = self._p_pr.get('algn')
@@ -262,8 +259,15 @@ class Paragraph(CacheDecoratableXmlNode):
             return HorizontalAlign.LEFT
         return None
 
-    @cache_persist
-    @property
+    @align.cache_serializer
+    def align(self, v: HorizontalAlign) -> int:
+        return v.value
+
+    @align.cache_unserializer
+    def align(self, v: int) -> HorizontalAlign:
+        return HorizontalAlign(v)
+
+    @cache_persist_property
     def line_height(self) -> Union[float, Emu, None]:
         ln_spc_spc_pct = first_or_none(self.xml.xpath('a:lnSpc[1]/a:spcPct[1]', namespaces=pptx_xml_ns))
         if ln_spc_spc_pct is not None:
@@ -279,8 +283,21 @@ class Paragraph(CacheDecoratableXmlNode):
             return 1
         return None
 
-    @cache_persist
-    @property
+    @line_height.cache_serializer
+    def line_height(self, v: Union[float, Emu]) -> Union[float, int]:
+        if isinstance(v, float):
+            return v
+        elif isinstance(v, Emu):
+            return int(v)
+
+    @line_height.cache_unserializer
+    def line_height(self, v: Union[float, int]) -> Union[float, Emu]:
+        if isinstance(v, float):
+            return v
+        elif isinstance(v, int):
+            return Emu(v)
+
+    @cache_persist_property
     def level(self) -> Optional[int]:
         if self._p_pr is not None:
             level_str = self._p_pr.get('lvl')
@@ -290,8 +307,7 @@ class Paragraph(CacheDecoratableXmlNode):
             return 0
         return None
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def level_width(self) -> Optional[Emu]:
         if self._p_pr is not None:
             level_width_str = self._p_pr.get('defTabSz')
@@ -301,8 +317,15 @@ class Paragraph(CacheDecoratableXmlNode):
             return Emu.from_px(32)
         return None
 
-    @cache_persist
-    @property
+    @level_width.cache_serializer
+    def level_width(self, v: Emu) -> int:
+        return int(v)
+
+    @level_width.cache_unserializer
+    def level_width(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_persist_property
     def margin_top(self) -> Optional[Emu]:
         spc_bef_spc_pts = first_or_none(self.xml.xpath('a:spcBef[1]/a:spcPts[1]', namespaces=pptx_xml_ns))
         if spc_bef_spc_pts is not None:
@@ -313,8 +336,15 @@ class Paragraph(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @cache_persist
-    @property
+    @margin_top.cache_serializer
+    def margin_top(self, v: Emu) -> int:
+        return int(v)
+
+    @margin_top.cache_unserializer
+    def margin_top(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_persist_property
     def margin_bottom(self) -> Optional[Emu]:
         spc_aft_spc_pts = first_or_none(self.xml.xpath('a:spcAft[1]/a:spcPts[1]', namespaces=pptx_xml_ns))
         if spc_aft_spc_pts is not None:
@@ -325,18 +355,23 @@ class Paragraph(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @cache_local
-    @property
+    @margin_bottom.cache_serializer
+    def margin_bottom(self, v: Emu) -> int:
+        return int(v)
+
+    @margin_bottom.cache_unserializer
+    def margin_bottom(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_local_property
     def _p_pr(self) -> Optional[ElementTree]:
         return first_or_none(self.xml.xpath('a:pPr[1]', namespaces=pptx_xml_ns))
 
-    @cache_local
-    @property
+    @cache_local_property
     def _def_r_pr(self) -> Optional[ElementTree]:
         return first_or_none(self.xml.xpath('a:defRPr[1]', namespaces=pptx_xml_ns))
 
-    @cache_local
-    @property
+    @cache_local_property
     def _run_xmls(self) -> List[ElementTree]:
         return self.xml.xpath('a:r', namespaces=pptx_xml_ns)
 
@@ -422,7 +457,7 @@ class TextFrame(CacheDecoratableXmlNode):
     def text(self) -> str:
         return '\n'.join(p.text for p in self.paragraphs)
 
-    @cache_persist
+    @cache_persist_property
     def margin_left(self) -> Optional[Emu]:
         if self._body_pr is not None:
             l_ins_str = self._body_pr.get('lIns')
@@ -432,7 +467,15 @@ class TextFrame(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @cache_persist
+    @margin_left.cache_serializer
+    def margin_left(self, v: Emu) -> int:
+        return int(v)
+
+    @margin_left.cache_unserializer
+    def margin_left(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_persist_property
     def margin_top(self) -> Optional[Emu]:
         if self._body_pr is not None:
             t_ins_str = self._body_pr.get('tIns')
@@ -442,7 +485,15 @@ class TextFrame(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @cache_persist
+    @margin_top.cache_serializer
+    def margin_top(self, v: Emu) -> int:
+        return int(v)
+
+    @margin_top.cache_unserializer
+    def margin_top(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_persist_property
     def margin_right(self) -> Optional[Emu]:
         if self._body_pr is not None:
             r_ins_str = self._body_pr.get('rIns')
@@ -452,7 +503,15 @@ class TextFrame(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @cache_persist
+    @margin_right.cache_serializer
+    def margin_right(self, v: Emu) -> int:
+        return int(v)
+
+    @margin_right.cache_unserializer
+    def margin_right(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_persist_property
     def margin_bottom(self) -> Optional[Emu]:
         if self._body_pr is not None:
             b_ins_str = self._body_pr.get('bIns')
@@ -462,7 +521,15 @@ class TextFrame(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @cache_persist
+    @margin_bottom.cache_serializer
+    def margin_bottom(self, v: Emu) -> int:
+        return int(v)
+
+    @margin_bottom.cache_unserializer
+    def margin_bottom(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_persist_property
     def vertical_align(self) -> Optional[VerticalAlign]:
         if self._body_pr is not None:
             anchor_str = self._body_pr.get('anchor')
@@ -477,7 +544,15 @@ class TextFrame(CacheDecoratableXmlNode):
             return VerticalAlign.TOP
         return None
 
-    @cache_persist
+    @vertical_align.cache_serializer
+    def vertical_align(self, v: VerticalAlign) -> int:
+        return v.value
+
+    @vertical_align.cache_unserializer
+    def vertical_align(self, v: int) -> VerticalAlign:
+        return VerticalAlign(v)
+
+    @cache_persist_property
     def do_word_wrap(self) -> Optional[bool]:
         if self._body_pr is not None:
             wrap_str = self._body_pr.get('wrap')
@@ -490,22 +565,18 @@ class TextFrame(CacheDecoratableXmlNode):
             return True
         return None
 
-    @cache_local
-    @property
+    @cache_local_property
     def _def_r_pr(self) -> Optional[ElementTree]:
         return first_or_none(self.xml.xpath('a:defRPr[1]', namespaces=pptx_xml_ns))
 
-    @cache_local
-    @property
+    @cache_local_property
     def _list_def_r_pr(self) -> Optional[ElementTree]:
         return first_or_none(self.xml.xpath('a:lstStyle[1]/a:lvl1pPr[1]/a:defRPr[1]', namespaces=pptx_xml_ns))
 
-    @cache_local
-    @property
+    @cache_local_property
     def _paragraph_xmls(self) -> List[ElementTree]:
         return self.xml.xpath('a:p', namespaces=pptx_xml_ns)
 
-    @cache_local
-    @property
+    @cache_local_property
     def _body_pr(self) -> Optional[ElementTree]:
         return first_or_none(self.xml.xpath('a:bodyPr[1]', namespaces=pptx_xml_ns))

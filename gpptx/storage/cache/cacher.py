@@ -89,7 +89,7 @@ class Cacher:
         return self._local_cache.get(str(key))
 
     def load_persisting_cache(self, cache: Dict[str, Any]) -> None:
-        for k, v in cache:
+        for k, v in cache.items():
             self.cache_persist(k, v, do_change_flag=False)
 
     def dump_persisting_cache(self) -> Dict[str, Any]:
@@ -107,6 +107,9 @@ class Cacher:
     @property
     def is_persisting_cache_changed_since_load(self) -> bool:
         return self._is_persisting_cache_changed_since_load
+
+    def mark_persisting_cache_saved(self):
+        self._is_persisting_cache_changed_since_load = False
 
     def _is_ok_for_persisting_cache(self, value: Any) -> bool:
         if value is None:

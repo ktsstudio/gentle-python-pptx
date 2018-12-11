@@ -4,7 +4,7 @@ from gpptx.storage.pptx.loader import Loader
 
 
 def delete_unused_media(loader: Loader) -> None:
-    media_filepaths = [it for it in loader.get_filelist() if it.startswith(MEDIA_PATH_PREFIX)]
+    media_filepaths = [it for it in loader.get_filelist() if it.startswith(MEDIA_PATH_PREFIX) and not it.endswith('.rels')]
     rels_filepaths = [it for it in loader.get_filelist() if it.endswith('.rels')]
 
     media_used_filepaths = set()

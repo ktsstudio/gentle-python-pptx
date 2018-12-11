@@ -2,9 +2,13 @@ import re
 from typing import Optional
 
 SLIDES_PATH_PREFIX = 'ppt/slides/'
+SLIDES_PATH_PREFIX_WITH_FILE = 'ppt/slides/slide'
 SLIDE_MASTERS_PATH_PREFIX = 'ppt/slideMasters/'
+SLIDE_MASTERS_PATH_PREFIX_WITH_FILE = 'ppt/slideMasters/slideMaster'
 SLIDE_LAYOUTS_PATH_PREFIX = 'ppt/slideLayouts/'
-THEMES_PATH_PREFIX = 'ppt/theme/'
+SLIDE_LAYOUTS_PATH_PREFIX_WITH_FILE = 'ppt/slideLayouts/slideLayout'
+THEMES_PATH_PREFIX = 'ppt/theme/theme'
+THEMES_PATH_PREFIX_WITH_FILE = 'ppt/theme/theme'
 MEDIA_PATH_PREFIX = 'ppt/media/'
 MEDIA_IMAGES_PATH_PREFIX = 'ppt/media/image/'
 ROOT_RELS_PATH_PREFIX = 'ppt/_rels/'

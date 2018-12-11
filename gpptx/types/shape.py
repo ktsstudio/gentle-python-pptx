@@ -6,7 +6,7 @@ from lxml.etree import ElementTree
 
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorator import cache_persist, cache_local
+from gpptx.storage.cache.decorator import cache_persist_property, cache_local_property
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.color_resolver import ColorResolver
 from gpptx.types.emu import Emu
@@ -36,7 +36,7 @@ class Shape(CacheDecoratableXmlNode, ABC):
         self._storage = storage
         self._storage_cache_key = cache_key
         self._shape_xml = shape_xml
-        self._slide_like_like = slide_like
+        self._slide_like = slide_like
 
     @property
     def xml(self) -> ElementTree:
@@ -53,22 +53,19 @@ class Shape(CacheDecoratableXmlNode, ABC):
     def shape_type(self) -> ShapeType:
         raise NotImplementedError
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def shape_id(self) -> int:
         assert self._c_nv_pr is not None
         id_str = self._c_nv_pr.get('id')
         assert id_str is not None
         return int(id_str)
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def name(self) -> str:
         assert self._c_nv_pr is not None
         return self._c_nv_pr.get('name', default='')
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def x(self) -> Optional[Emu]:
         if self._xfrm_off is not None:
             x_str = self._xfrm_off.get('x')
@@ -78,8 +75,15 @@ class Shape(CacheDecoratableXmlNode, ABC):
             return Emu(0)
         return None
 
-    @cache_persist
-    @property
+    @x.cache_serializer
+    def x(self, v: Emu) -> int:
+        return int(v)
+
+    @x.cache_unserializer
+    def x(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_persist_property
     def y(self) -> Optional[Emu]:
         if self._xfrm_off is not None:
             y_str = self._xfrm_off.get('y')
@@ -89,7 +93,15 @@ class Shape(CacheDecoratableXmlNode, ABC):
             return Emu(0)
         return None
 
-    @cache_persist
+    @y.cache_serializer
+    def y(self, v: Emu) -> int:
+        return int(v)
+
+    @y.cache_unserializer
+    def y(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_persist_property
     def width(self) -> Optional[Emu]:
         if self._xfrm_ext is not None:
             cx_str = self._xfrm_ext.get('cx')
@@ -99,8 +111,15 @@ class Shape(CacheDecoratableXmlNode, ABC):
             return Emu(0)
         return None
 
-    @cache_persist
-    @property
+    @width.cache_serializer
+    def width(self, v: Emu) -> int:
+        return int(v)
+
+    @width.cache_unserializer
+    def width(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_persist_property
     def height(self) -> Optional[Emu]:
         if self._xfrm_ext is not None:
             cy_str = self._xfrm_ext.get('cy')
@@ -110,29 +129,33 @@ class Shape(CacheDecoratableXmlNode, ABC):
             return Emu(0)
         return None
 
+    @height.cache_serializer
+    def height(self, v: Emu) -> int:
+        return int(v)
+
+    @height.cache_unserializer
+    def height(self, v: int) -> Emu:
+        return Emu(v)
+
     @property
     def color_resolver(self) -> ColorResolver:
         return ColorResolver(self)
 
-    @cache_local
-    @property
+    @cache_local_property
     def _c_nv_pr(self) -> Optional[ElementTree]:
-        return first_or_none(self._shape_xml.xpath('p:nvSpPr[1]/p:cNvPr[1]', namespaces=pptx_xml_ns))
+        return first_or_none(self._shape_xml.xpath('.//p:cNvPr[1]', namespaces=pptx_xml_ns))
 
-    @cache_local
-    @property
+    @cache_local_property
     def _xfrm(self) -> Optional[ElementTree]:
         return first_or_none(self._shape_xml.xpath('a:xfrm[1]', namespaces=pptx_xml_ns))
 
-    @cache_local
-    @property
+    @cache_local_property
     def _xfrm_off(self) -> Optional[ElementTree]:
         if self._xfrm is None:
             return None
         return first_or_none(self._xfrm.xpath('a:off[1]', namespaces=pptx_xml_ns))
 
-    @cache_local
-    @property
+    @cache_local_property
     def _xfrm_ext(self) -> Optional[ElementTree]:
         if self._xfrm is None:
             return None
@@ -153,10 +176,9 @@ class TextShape(Shape):
     def text_frame(self) -> TextFrame:
         return TextFrame(self._storage, self._storage_cache_key.make_son('text_frame'), self._tx_body, self)
 
-    @cache_local
-    @property
+    @cache_local_property
     def _tx_body(self) -> Optional[ElementTree]:
-        return first_or_none(self.xml.xpath('a:txBody[1]', namespaces=pptx_xml_ns))
+        return first_or_none(self.xml.xpath('p:txBody[1]', namespaces=pptx_xml_ns))
 
 
 class PatternType(Enum):
@@ -213,10 +235,10 @@ class GroupShape(Shape):
     def shapes(self):
         from gpptx.types.shapes_coll import ShapesCollection
 
-        return ShapesCollection(self._storage, self._storage_cache_key.make_son('shapes'), self._shape_xmls, self._slide)
+        return ShapesCollection(self._storage, self._storage_cache_key.make_son('shapes'), self._shape_xmls,
+                                self._slide_like)
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def children_offset_x(self) -> Emu:
         if self._xfrm_ch_off is not None:
             x_str = self._xfrm_ch_off.get('x')
@@ -224,8 +246,15 @@ class GroupShape(Shape):
                 return Emu(int(x_str))
         return Emu(0)
 
-    @cache_persist
-    @property
+    @children_offset_x.cache_serializer
+    def children_offset_x(self, v: Emu) -> int:
+        return int(v)
+
+    @children_offset_x.cache_unserializer
+    def children_offset_x(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_persist_property
     def children_offset_y(self) -> Emu:
         if self._xfrm_ch_off is not None:
             y_str = self._xfrm_ch_off.get('y')
@@ -233,17 +262,34 @@ class GroupShape(Shape):
                 return Emu(int(y_str))
         return Emu(0)
 
-    @cache_local
-    @property
+    @children_offset_y.cache_serializer
+    def children_offset_y(self, v: Emu) -> int:
+        return int(v)
+
+    @children_offset_y.cache_unserializer
+    def children_offset_y(self, v: int) -> Emu:
+        return Emu(v)
+
+    @cache_local_property
     def _xfrm_ch_off(self) -> Optional[ElementTree]:
         if self._xfrm is None:
             return None
         return first_or_none(self._xfrm.xpath('a:chOff[1]', namespaces=pptx_xml_ns))
 
-    @cache_local
-    @property
+    @cache_local_property
     def _shape_xmls(self) -> List[ElementTree]:
-        return self.xml.xpath('./*/p:spPr[1]/..', namespaces=pptx_xml_ns)
+        els = self.xml.xpath('./*/p:spPr[1]/..', namespaces=pptx_xml_ns)
+
+        els_at_indexes_to_remove = list()
+        for i, el in enumerate(els):
+            if el.tag.endswith('Pr'):
+                els_at_indexes_to_remove.append(i)
+        delete_shift = 0
+        for i in els_at_indexes_to_remove:
+            els.pop(i - delete_shift)
+            delete_shift += 1
+
+        return els
 
 
 class PlaceholderType(Enum):
@@ -276,8 +322,7 @@ class PlaceholderShape(Shape):
     def shape_type(self) -> ShapeType:
         return ShapeType.PLACEHOLDER
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def placeholder_type(self) -> PlaceholderType:
         type_ = self.xml.get('type')
         if type_ == 'clipArt':
@@ -313,6 +358,14 @@ class PlaceholderShape(Shape):
         elif type_ == 'title':
             return PlaceholderType.TITLE
         return PlaceholderType.UNKNOWN
+
+    @placeholder_type.cache_serializer
+    def placeholder_type(self, v: PlaceholderType) -> int:
+        return v.value
+
+    @placeholder_type.cache_unserializer
+    def placeholder_type(self, v: int) -> PlaceholderType:
+        return PlaceholderType(v)
 
 
 class UnknownShape(Shape):

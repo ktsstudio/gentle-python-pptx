@@ -5,7 +5,7 @@ from lxml.etree import ElementTree
 from gpptx.pptx_tools.colors import SYSTEM_COLOR_NAMES
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorator import cache_persist
+from gpptx.storage.cache.decorator import cache_persist_property
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.xml_node import CacheDecoratableXmlNode
 
@@ -29,8 +29,7 @@ class Theme(CacheDecoratableXmlNode):
     def save_xml(self) -> None:
         return self._storage.loader.save_file_xml(self._xml_path, self.xml)
 
-    @cache_persist
-    @property
+    @cache_persist_property
     def color_rgbs(self) -> Dict[str, str]:
         result: Dict[str, str] = dict()
 

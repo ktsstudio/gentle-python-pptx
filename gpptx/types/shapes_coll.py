@@ -115,6 +115,14 @@ class ShapesCollection(CacheDecoratable):
 
         return ShapeType.UNKNOWN
 
+    @_get_shape_type.cache_serializer
+    def _get_shape_type(self, v: ShapeType) -> int:
+        return v.value
+
+    @_get_shape_type.cache_unserializer
+    def _get_shape_type(self, v: int) -> ShapeType:
+        return ShapeType(v)
+
     def _make_shape(self, shape_type: ShapeType, shape_index: int) -> Shape:
         shape_xml = self._shape_xmls[shape_index]
         cache_key = self._storage_cache_key.make_son(str(shape_index))

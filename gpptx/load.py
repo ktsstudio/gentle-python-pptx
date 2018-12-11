@@ -39,3 +39,6 @@ class PresentationContainer:
     @property
     def is_cache_changed_since_load(self) -> bool:
         return self._storage.cacher.is_persisting_cache_changed_since_load
+
+    def mark_cache_saved(self) -> bool:
+        return self._storage.cacher.mark_persisting_cache_saved()

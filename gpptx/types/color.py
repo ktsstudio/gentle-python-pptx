@@ -95,7 +95,7 @@ class PresetColor(Color):
 
     @property
     def rgb_str(self) -> str:
-        color_name = self.xml.attriVb['val']
+        color_name = self.xml.attrib['val']
         r, g, b = _parse_rgb_str(PRESET_COLORS[color_name])
         r, g, b = _parse_color_change(self.xml, r, g, b)
         return _stringify_rgb(r, g, b)
@@ -120,7 +120,7 @@ class SchemeColor(Color):
 
     @property
     def rgb_str(self) -> str:
-        theme_color_name = self.xml.attriVb['val']
+        theme_color_name = self.xml.attrib['val']
         color_rgb = self._theme.color_rgbs[theme_color_name]
         r, g, b = _parse_rgb_str(color_rgb)
         r, g, b = _parse_color_change(self.xml, r, g, b)

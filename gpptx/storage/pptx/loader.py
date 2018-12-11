@@ -53,7 +53,7 @@ class Loader:
         new_loader._all_files = self._all_files
         new_loader._deleted_files = copy.deepcopy(self._deleted_files)
 
-        new_loader._xml_cache = dict()
+        new_loader._xml_cache = copy.deepcopy(self._xml_cache)
         new_loader._changed_files_cache = copy.deepcopy(self._changed_files_cache)
         new_loader._changed_xml_cache = copy.deepcopy(self._changed_xml_cache)
 
@@ -113,9 +113,9 @@ class Loader:
         self._deleted_files.add(filepath)
 
     def _clear_file_caches(self, filepath: str) -> None:
-        self._xml_cache.pop(filepath, default=None)
-        self._changed_files_cache.pop(filepath, default=None)
-        self._changed_xml_cache.pop(filepath, default=None)
+        self._xml_cache.pop(filepath, None)
+        self._changed_files_cache.pop(filepath, None)
+        self._changed_xml_cache.pop(filepath, None)
 
     @staticmethod
     def _parse_xml(blob: bytes) -> ElementTree:

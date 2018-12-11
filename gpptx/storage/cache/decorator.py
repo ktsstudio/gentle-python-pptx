@@ -1,6 +1,8 @@
 from abc import ABC
+from functools import update_wrapper, WRAPPER_ASSIGNMENTS
 from typing import Callable, List, Any, Dict, Collection, Type
 
+from gpptx.storage.cache.cacher import CacheKey
 from gpptx.storage.storage import PresentationStorage
 
 
@@ -9,79 +11,43 @@ class CacheDecoratable(ABC):
 
 
 def cache_persist(f: Callable) -> Callable:
-    return _CacheDecorator(f, do_use_persisting_cache=True)
+    return _CacheDecoratorMethod(f, do_use_persisting_cache=True)
 
 
 def cache_local(f: Callable) -> Callable:
-    return _CacheDecorator(f, do_use_persisting_cache=False)
+    return _CacheDecoratorMethod(f, do_use_persisting_cache=False)
 
 
-class _CacheDecorator:
-    _DECORATOR_MEMBERS = ('_fn', '_do_use_persisting_cache', '_is_fn_property_descriptor')
+def cache_persist_property(f: Callable):
+    return _CacheDecoratorProperty(f, do_use_persisting_cache=True)
 
-    def __init__(self, fn: Callable, do_use_persisting_cache: bool):
-        self._fn = fn
+
+def cache_local_property(f: Callable):
+    return _CacheDecoratorProperty(f, do_use_persisting_cache=False)
+
+
+class _BaseCacheDecorator(ABC):
+    def __init__(self, do_use_persisting_cache: bool):
         self._do_use_persisting_cache = do_use_persisting_cache
-        self._is_fn_property_descriptor = isinstance(self.__dict__['_fn'], property)
+        self._serializer_fn: Callable[[Any], Any] = None
+        self._unserializer_fn: Callable[[Any], Any] = None
 
-    def __call__(self, fn_self: CacheDecoratable, *args, **kwargs) -> Any:
-        if not self._is_fn_property_descriptor:
-            return self._call(self.__dict__['_fn'], fn_self, args, kwargs)
-        else:
-            raise AttributeError
-
-    def __get__(self, fn_self: CacheDecoratable, fn_cls: Type) -> Any:
-        if self._is_fn_property_descriptor:
-            # noinspection PyUnresolvedReferences
-            return self._call(self.__dict__['_fn'].__get__, fn_self, args=(fn_cls,), do_note_args=False)
-        else:
-            return self
-
-    def __set__(self, fn_self: CacheDecoratable, value: Any) -> None:
-        if self._is_fn_property_descriptor:
-            # noinspection PyUnresolvedReferences
-            self.__dict__['_fn'].__set__(fn_self, value)
-            self.clear_cache()
-        else:
-            raise AttributeError
-
-    def __getattr__(self, k: str) -> Any:
-        if k in self._DECORATOR_MEMBERS:
-            return self.__dict__[k]
-        return getattr(self.__dict__['_fn'], k)
-
-    def __setattr__(self, k: str, v: Any) -> None:
-        if k in self._DECORATOR_MEMBERS:
-            self.__dict__[k] = v
-            return
-        setattr(self.__dict__['_fn'], k, v)
-
-    def clear_cache(self) -> None:
-        fn_self: CacheDecoratable = self.__self__
-        call_cache_key_name = self._make_call_cache_key_name(self.__dict__['_fn'].__name__)
-        # noinspection PyProtectedMember
-        son_cache_key = fn_self._storage_cache_key.make_son(call_cache_key_name)
-        # noinspection PyProtectedMember
-        fn_self._storage.cacher.delete_from_any_cache(son_cache_key)
-
-    def _call(self, fn_call: Callable,
+    def _call(self, fn: Callable, fn_name: str,
               fn_self: CacheDecoratable, args: Collection[Any] = None, kwargs: Dict[str, Any] = None,
-              do_note_args: bool = True):
+              do_note_args_in_cache: bool = True):
         # noinspection PyProtectedMember
         if not fn_self._storage_cache_key.do_disable_cache:
-            if do_note_args:
-                call_cache_key_name = self._make_call_cache_key_name(self.__dict__['_fn'].__name__, args, kwargs)
-            else:
-                call_cache_key_name = self._make_call_cache_key_name(self.__dict__['_fn'].__name__)
             # noinspection PyProtectedMember
-            son_cache_key = fn_self._storage_cache_key.make_son(call_cache_key_name)
+            call_cache_key = self._make_call_cache_key(fn_self._storage_cache_key,
+                                                       fn_name, args, kwargs,
+                                                       do_note_args_in_cache=do_note_args_in_cache)
         else:
-            son_cache_key = None
+            call_cache_key = None
 
         # noinspection PyProtectedMember
         if not fn_self._storage_cache_key.do_disable_cache:
             # noinspection PyProtectedMember
-            value = self._get_cache_get_fn(fn_self._storage)(son_cache_key)
+            value = self._get_from_cache(call_cache_key, fn_self)
             if value is not None:
                 return value
 
@@ -89,13 +55,37 @@ class _CacheDecorator:
             args = tuple()
         if kwargs is None:
             kwargs = dict()
-        value = fn_call(fn_self, *args, **kwargs)
+        value = fn(fn_self, *args, **kwargs)
 
         # noinspection PyProtectedMember
         if not fn_self._storage_cache_key.do_disable_cache:
             # noinspection PyProtectedMember
-            self._get_cache_save_fn(fn_self._storage)(son_cache_key, value)
+            self._save_to_cache(call_cache_key, value, fn_self)
         return value
+
+    def _make_call_cache_key(self, storage_cache_key: CacheKey,
+                             fn_name: str, args: Collection[Any], kwargs: Dict[str, Any],
+                             do_note_args_in_cache: bool):
+        if do_note_args_in_cache:
+            call_cache_key_name = self._make_call_cache_key_name(fn_name, args, kwargs)
+        else:
+            call_cache_key_name = self._make_call_cache_key_name(fn_name)
+        return storage_cache_key.make_son(call_cache_key_name)
+
+    def _get_from_cache(self, call_cache_key: CacheKey, fn_self: CacheDecoratable):
+        # noinspection PyProtectedMember
+        get_fn = self._get_cache_get_fn(fn_self._storage)
+        value = get_fn(call_cache_key)
+        if self._unserializer_fn is not None and value is not None:
+            value = self._unserializer_fn(fn_self, value)
+        return value
+
+    def _save_to_cache(self, call_cache_key: CacheKey, value: Any, fn_self: CacheDecoratable):
+        # noinspection PyProtectedMember
+        save_fn = self._get_cache_save_fn(fn_self._storage)
+        if self._serializer_fn is not None and value is not None:
+            value = self._serializer_fn(fn_self, value)
+        save_fn(call_cache_key, value)
 
     def _get_cache_get_fn(self, storage: PresentationStorage) -> Callable:
         if self._do_use_persisting_cache:
@@ -122,3 +112,92 @@ class _CacheDecorator:
                 parts.append(str(k))
                 parts.append(str(v))
         return '.'.join(parts)
+
+    def _clear_cache(self, fn_self: CacheDecoratable, fn_name: str) -> None:
+        call_cache_key_name = self._make_call_cache_key_name(fn_name)
+        # noinspection PyProtectedMember
+        son_cache_key = fn_self._storage_cache_key.make_son(call_cache_key_name)
+        # noinspection PyProtectedMember
+        fn_self._storage.cacher.delete_from_any_cache(son_cache_key)
+
+
+class _CacheDecoratorMethod(_BaseCacheDecorator):
+    _DECORATOR_MEMBERS = ('_do_use_persisting_cache', '_serializer_fn', '_unserializer_fn', '_fn')
+
+    def __init__(self, fn: Callable, do_use_persisting_cache: bool):
+        super().__init__(do_use_persisting_cache)
+        self._fn = fn
+        update_wrapper(self, self._fn, assigned=WRAPPER_ASSIGNMENTS, updated=())
+
+    def __get__(self, fn_self: CacheDecoratable, fn_cls: Type) -> Callable:
+        return lambda *args, **kwargs: self._call(self._fn, self._fn.__name__, fn_self, args, kwargs)
+
+    def __call__(self, fn_self: CacheDecoratable, *args, **kwargs) -> Any:
+        return self._call(self._fn, self._fn.__name__, fn_self, args, kwargs)
+
+    def __getattr__(self, k: str) -> Any:
+        if k in self._DECORATOR_MEMBERS:
+            return self.__dict__[k]
+        return getattr(self._fn, k)
+
+    def __setattr__(self, k: str, v: Any) -> None:
+        if k in self._DECORATOR_MEMBERS:
+            self.__dict__[k] = v
+            return
+        setattr(self._fn, k, v)
+
+    def cache_serializer(self, serializer_fn: Callable[[Any], Any]):
+        self._serializer_fn = serializer_fn
+        return self
+
+    def cache_unserializer(self, unserializer_fn: Callable[[Any], Any]):
+        self._unserializer_fn = unserializer_fn
+        return self
+
+    def clear_cache(self, cache_decoratable: CacheDecoratable) -> None:
+        self._clear_cache(cache_decoratable, self._fn.__name__)
+
+
+class _CacheDecoratorProperty(_BaseCacheDecorator):
+    _DECORATOR_MEMBERS = ('_do_use_persisting_cache', '_serializer_fn', '_unserializer_fn', '_getter_fn', '_setter_fn')
+
+    def __init__(self, getter_fn: Callable[[], Any], do_use_persisting_cache: bool):
+        super().__init__(do_use_persisting_cache)
+        self._getter_fn = getter_fn
+        self._setter_fn: Callable[[Any], None] = None
+        update_wrapper(self, self._getter_fn, assigned=WRAPPER_ASSIGNMENTS, updated=())
+
+    def __get__(self, fn_self: CacheDecoratable, fn_cls: Type) -> Any:
+        return self._call(self._getter_fn, self._getter_fn.__name__, fn_self, do_note_args_in_cache=False)
+
+    def __set__(self, fn_self: CacheDecoratable, value: Any) -> None:
+        if self._setter_fn is None:
+            raise AttributeError
+        self._setter_fn(fn_self, value)
+        self._clear_cache(fn_self, self._getter_fn.__name__)
+
+    def __getattr__(self, k: str) -> Any:
+        if k in self._DECORATOR_MEMBERS:
+            return self.__dict__[k]
+        return getattr(self._getter_fn, k)
+
+    def __setattr__(self, k: str, v: Any) -> None:
+        if k in self._DECORATOR_MEMBERS:
+            self.__dict__[k] = v
+            return
+        setattr(self._getter_fn, k, v)
+
+    def setter(self, setter_fn: Callable[[Any], None]):
+        self._setter_fn = setter_fn
+        return self
+
+    def cache_serializer(self, serializer_fn: Callable[[Any], Any]):
+        self._serializer_fn = serializer_fn
+        return self
+
+    def cache_unserializer(self, unserializer_fn: Callable[[Any], Any]):
+        self._unserializer_fn = unserializer_fn
+        return self
+
+    def clear_cache(self, cache_decoratable: CacheDecoratable) -> None:
+        self._clear_cache(cache_decoratable, self._fn.__name__)
