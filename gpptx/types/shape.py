@@ -278,7 +278,7 @@ class GroupShape(Shape):
             return None
         return first_or_none(self._xfrm.xpath('a:chOff[1]', namespaces=pptx_xml_ns))
 
-    @property
+    @cache_local_property
     def _shape_xmls(self) -> LazyElementTreeList:
         return LazyElementTreeList(self._find_shape_xmls, self._shapes_count,
                                    invalidate_length_fn=lambda: clear_decorator_cache(self, '_shapes_count'))

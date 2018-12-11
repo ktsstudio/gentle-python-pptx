@@ -3,11 +3,12 @@ from typing import Any, Dict, List, Optional
 
 
 class CacheKey:
-    __slots__ = ('name', 'parent', 'root', 'do_disable_cache')
+    __slots__ = ('name', 'parent', 'root', 'do_disable_cache', 'postfix')
 
     def __init__(self, name: str, parent=None, do_disable_cache: bool = None):
         self.name = name
         self.parent = parent
+        self.postfix = None
 
         if self.parent is None:
             self.root = self
@@ -24,6 +25,9 @@ class CacheKey:
 
     def __str__(self) -> str:
         reversed_path: List[str] = list()
+
+        if self.postfix is not None:
+            reversed_path.append(self.postfix)
 
         current_key = self
         while current_key is not None:
@@ -87,6 +91,12 @@ class Cacher:
 
     def get_from_local_cache(self, key: CacheKey) -> Optional[Any]:
         return self._local_cache.get(str(key))
+
+    def have_in_persisting_cache(self, key: CacheKey) -> Optional[Any]:
+        return str(key) in self._persisting_cache
+
+    def have_in_local_cache(self, key: CacheKey) -> Optional[Any]:
+        return str(key) in self._local_cache
 
     def load_persisting_cache(self, cache: Dict[str, Any]) -> None:
         for k, v in cache.items():

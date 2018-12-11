@@ -211,17 +211,22 @@ class RunCollection(CacheDecoratable):
         new_run_index = len(self._run_xml_getters) - 1
         return Run(self._storage, self._storage_cache_key.make_son(str(new_run_index)), new_xml, self._paragraph)
 
-    def delete_run(self, index: int) -> None:
+    def delete_run(self, index: int, do_affect_xml: bool = True) -> None:
         # delete
-        self._paragraph.xml.remove(self._run_xml_getters[index]())
-        self._paragraph.save_xml()
+        if do_affect_xml:
+            self._paragraph.xml.remove(self._run_xml_getters[index]())
+            self._paragraph.save_xml()
 
         # update cache
-        for i in range(index, len(self._run_xml_getters)):
-            run_cache = self._storage_cache_key.make_son(str(i))
-            self._storage.cacher.delete_from_any_cache(run_cache)
+        if do_affect_xml:
+            for i in range(index, len(self._run_xml_getters)):
+                run_cache = self._storage_cache_key.make_son(str(i))
+                self._storage.cacher.delete_from_any_cache(run_cache)
 
-        self._run_xml_getters.pop(index)
+        if do_affect_xml:
+            self._run_xml_getters.pop(index, was_xml_affected_already=True)
+        else:
+            self._run_xml_getters.pop(index, do_affect_xml=False, do_invalidate_len_cache=False)
 
 
 class Paragraph(CacheDecoratableXmlNode):
@@ -289,15 +294,17 @@ class Paragraph(CacheDecoratableXmlNode):
             if val_str is not None:
                 return float(val_str)
         if self.do_use_defaults_when_null:
-            return 1
+            return 1.00001
         return None
 
     @line_height.cache_serializer
     def line_height(self, v: Union[float, Emu]) -> Union[float, int]:
-        if isinstance(v, float):
-            return v
-        elif isinstance(v, Emu):
+        if isinstance(v, Emu):
             return int(v)
+        elif isinstance(v, float):
+            return v
+        elif isinstance(v, int):
+            return float(v)
 
     @line_height.cache_unserializer
     def line_height(self, v: Union[float, int]) -> Union[float, Emu]:
@@ -380,7 +387,7 @@ class Paragraph(CacheDecoratableXmlNode):
     def _def_r_pr(self) -> Optional[ElementTree]:
         return first_or_none(self.xml.xpath('a:defRPr[1]', namespaces=pptx_xml_ns))
 
-    @property
+    @cache_local_property
     def _run_xmls(self) -> LazyElementTreeList:
         return LazyElementTreeList(self._find_run_xmls, self._run_xmls_count,
                                    invalidate_length_fn=lambda: clear_decorator_cache(self, '_run_xmls_count'))
@@ -431,16 +438,22 @@ class ParagraphCollection(CacheDecoratable):
         return Paragraph(self._storage, self._storage_cache_key.make_son(str(new_paragraph_index)), new_xml,
                          self._text_frame)
 
-    def delete_run(self, index: int) -> None:
+    def delete_paragraph(self, index: int, do_affect_xml: bool = True) -> None:
         # delete
-        self._text_frame.xml.remove(self._paragraph_xml_getters[index]())
+        if do_affect_xml:
+            self._text_frame.xml.remove(self._paragraph_xml_getters[index]())
+            self._text_frame.save_xml()
 
         # update cache
-        for i in range(index, len(self._paragraph_xml_getters)):
-            run_cache = self._storage_cache_key.make_son(str(i))
-            self._storage.cacher.delete_from_any_cache(run_cache)
+        if do_affect_xml:
+            for i in range(index, len(self._paragraph_xml_getters)):
+                run_cache = self._storage_cache_key.make_son(str(i))
+                self._storage.cacher.delete_from_any_cache(run_cache)
 
-        self._paragraph_xml_getters.pop(index)
+        if do_affect_xml:
+            self._paragraph_xml_getters.pop(index, was_xml_affected_already=True)
+        else:
+            self._paragraph_xml_getters.pop(index, do_affect_xml=False, do_invalidate_len_cache=False)
 
 
 class TextFrame(CacheDecoratableXmlNode):
@@ -592,7 +605,7 @@ class TextFrame(CacheDecoratableXmlNode):
     def _list_def_r_pr(self) -> Optional[ElementTree]:
         return first_or_none(self.xml.xpath('a:lstStyle[1]/a:lvl1pPr[1]/a:defRPr[1]', namespaces=pptx_xml_ns))
 
-    @property
+    @cache_local_property
     def _paragraph_xmls(self) -> LazyElementTreeList:
         return LazyElementTreeList(self._find_paragraph_xmls, self._paragraph_xmls_count,
                                    invalidate_length_fn=lambda: clear_decorator_cache(self, '_paragraph_xmls_count'))

@@ -8,7 +8,8 @@ from gpptx.pptx_tools.paths import make_rels_path, SLIDE_LAYOUTS_PATH_PREFIX, \
 from gpptx.pptx_tools.rels import find_first_relation_path_with_prefix
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorator import cache_persist_property, cache_local, clear_decorator_cache
+from gpptx.storage.cache.decorator import cache_persist_property, cache_local, clear_decorator_cache, \
+    cache_local_property
 from gpptx.storage.cache.lazy_element_tree import LazyElementTreeList
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.shapes_coll import ShapesCollection
@@ -32,7 +33,7 @@ class SlideLike(CacheDecoratableXmlNode, ABC):
     def theme(self) -> Theme:
         raise NotImplementedError
 
-    @property
+    @cache_local_property
     def _shape_xmls(self) -> LazyElementTreeList:
         return LazyElementTreeList(self._find_shape_xmls, self._shapes_count,
                                    invalidate_length_fn=lambda: clear_decorator_cache(self, '_shapes_count'))

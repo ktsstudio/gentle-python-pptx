@@ -27,12 +27,25 @@ def cache_local_property(f: Callable):
 
 
 def clear_decorator_cache(obj: CacheDecoratable, func_name: str,
-                          args: Collection[Any] = None, kwargs: Dict[str, Any] = None):
-    call_cache_key_name = _make_call_cache_key_name(func_name, args, kwargs)
+                          func_args: Collection[Any] = None, func_kwargs: Dict[str, Any] = None):
+    call_cache_key_name = _make_call_cache_key_name(func_name, func_args, func_kwargs)
     # noinspection PyProtectedMember
     son_cache_key = obj._storage_cache_key.make_son(call_cache_key_name)
     # noinspection PyProtectedMember
     obj._storage.cacher.delete_from_any_cache(son_cache_key)
+
+
+def change_decorator_cache(obj: CacheDecoratable, func_name: str, value: Any, do_change_persisting_cache: bool,
+                           func_args: Collection[Any] = None, func_kwargs: Dict[str, Any] = None):
+    call_cache_key_name = _make_call_cache_key_name(func_name, func_args, func_kwargs)
+    # noinspection PyProtectedMember
+    son_cache_key = obj._storage_cache_key.make_son(call_cache_key_name)
+    if do_change_persisting_cache:
+        # noinspection PyProtectedMember
+        obj._storage.cacher.cache_persist(son_cache_key, value)
+    else:
+        # noinspection PyProtectedMember
+        obj._storage.cacher.cache_local(son_cache_key, value)
 
 
 class _BaseCacheDecorator(ABC):
@@ -54,9 +67,8 @@ class _BaseCacheDecorator(ABC):
 
         # noinspection PyProtectedMember
         if not fn_self._storage_cache_key.do_disable_cache:
-            # noinspection PyProtectedMember
-            value = self._get_from_cache(call_cache_key, fn_self)
-            if value is not None:
+            value, do_exist = self._get_from_cache(call_cache_key, fn_self)
+            if do_exist:
                 return value
 
         if args is None:
@@ -81,15 +93,22 @@ class _BaseCacheDecorator(ABC):
             call_cache_key_name = _make_call_cache_key_name(fn_name)
         return storage_cache_key.make_son(call_cache_key_name)
 
-    def _get_from_cache(self, call_cache_key: CacheKey, fn_self: CacheDecoratable):
+    def _get_from_cache(self, call_cache_key: CacheKey, fn_self: CacheDecoratable) -> [Any, bool]:
         # noinspection PyProtectedMember
         get_fn = self._get_cache_get_fn(fn_self._storage)
+        # noinspection PyProtectedMember
+        have_fn = self._get_cache_have_fn(fn_self._storage)
+
+        do_exist = have_fn(call_cache_key)
+        if not do_exist:
+            return None, False
+
         value = get_fn(call_cache_key)
         if self._unserializer_fn is not None and value is not None:
             value = self._unserializer_fn(fn_self, value)
-        return value
+        return value, True
 
-    def _save_to_cache(self, call_cache_key: CacheKey, value: Any, fn_self: CacheDecoratable):
+    def _save_to_cache(self, call_cache_key: CacheKey, value: Any, fn_self: CacheDecoratable) -> None:
         # noinspection PyProtectedMember
         save_fn = self._get_cache_save_fn(fn_self._storage)
         if self._serializer_fn is not None and value is not None:
@@ -101,6 +120,12 @@ class _BaseCacheDecorator(ABC):
             return storage.cacher.get_from_persisting_cache
         else:
             return storage.cacher.get_from_local_cache
+
+    def _get_cache_have_fn(self, storage: PresentationStorage) -> Callable:
+        if self._do_use_persisting_cache:
+            return storage.cacher.have_in_persisting_cache
+        else:
+            return storage.cacher.have_in_local_cache
 
     def _get_cache_save_fn(self, storage: PresentationStorage) -> Callable:
         if self._do_use_persisting_cache:

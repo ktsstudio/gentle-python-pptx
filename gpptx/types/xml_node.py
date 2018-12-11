@@ -80,4 +80,7 @@ class CacheDecoratableXmlNode(BaseXmlNode, CacheDecoratable, ABC):
     @do_use_defaults_when_null.setter
     def do_use_defaults_when_null(self, value: bool) -> None:
         self._do_use_defaults_when_null = value
-        self._storage_cache_key.do_disable_cache = not self._do_use_defaults_when_null
+        if self._do_use_defaults_when_null:
+            self._storage_cache_key.postfix = None
+        else:
+            self._storage_cache_key.postfix = 'disabled_defaults_when_null'
