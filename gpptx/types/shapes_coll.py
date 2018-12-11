@@ -1,24 +1,23 @@
 from typing import Union, Any, List, Optional, Dict
 
-from lxml.etree import ElementTree
-
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
 from gpptx.storage.cache.decorator import cache_local, CacheDecoratable, cache_persist
+from gpptx.storage.cache.lazy_element_tree import LazyElementTreeList
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.shape import Shape, GroupShape, ShapeType, TextShape, PatternShape, PatternType, ImageShape, \
     PlaceholderShape, UnknownShape
 
 
 class ShapesCollection(CacheDecoratable):
-    __slots__ = ('_shape_xmls', '_slide')
+    __slots__ = ('_shape_xml_getters', '_slide')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xmls: List[ElementTree], slide):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getters: LazyElementTreeList, slide):
         from gpptx.types.slide import SlideLike
 
         self._storage = storage
         self._storage_cache_key = cache_key
-        self._shape_xmls = shape_xmls
+        self._shape_xml_getters = shape_xml_getters
         self._slide: SlideLike = slide
 
     def __getitem__(self, shape_id: int) -> Shape:
@@ -28,11 +27,11 @@ class ShapesCollection(CacheDecoratable):
         return shape
 
     def __iter__(self):
-        for shape_index in range(len(self._shape_xmls)):
+        for shape_index in range(len(self._shape_xml_getters)):
             yield self._make_shape(self._get_shape_type(shape_index), shape_index)
 
     def __len__(self):
-        return len(self._shape_xmls)
+        return len(self._shape_xml_getters)
 
     def get(self, shape_id: int, default=None) -> Union[Shape, Any]:
         return self.flatten_as_dict(keep_groups=True).get(shape_id, default=default)
@@ -87,7 +86,7 @@ class ShapesCollection(CacheDecoratable):
 
     @cache_persist
     def _get_shape_type(self, shape_index: int) -> ShapeType:
-        shape_xml = self._shape_xmls[shape_index]
+        shape_xml = self._shape_xml_getters[shape_index]()
 
         is_group = 'grpSp' in shape_xml.tag
         if is_group:
@@ -124,20 +123,20 @@ class ShapesCollection(CacheDecoratable):
         return ShapeType(v)
 
     def _make_shape(self, shape_type: ShapeType, shape_index: int) -> Shape:
-        shape_xml = self._shape_xmls[shape_index]
+        shape_xml_getter = self._shape_xml_getters[shape_index]
         cache_key = self._storage_cache_key.make_son(str(shape_index))
 
         if shape_type == ShapeType.TEXT:
-            return TextShape(self._storage, cache_key, shape_xml, self._slide)
+            return TextShape(self._storage, cache_key, shape_xml_getter, self._slide)
         if shape_type == ShapeType.PATTERN_SOLID:
-            return PatternShape(self._storage, cache_key, shape_xml, self._slide, PatternType.SOLID)
+            return PatternShape(self._storage, cache_key, shape_xml_getter, self._slide, PatternType.SOLID)
         if shape_type == ShapeType.PATTERN_GRADIENT:
-            return PatternShape(self._storage, cache_key, shape_xml, self._slide, PatternType.GRADIENT)
+            return PatternShape(self._storage, cache_key, shape_xml_getter, self._slide, PatternType.GRADIENT)
         if shape_type == ShapeType.IMAGE:
-            return ImageShape(self._storage, cache_key, shape_xml, self._slide)
+            return ImageShape(self._storage, cache_key, shape_xml_getter, self._slide)
         if shape_type == ShapeType.GROUP:
-            return GroupShape(self._storage, cache_key, shape_xml, self._slide)
+            return GroupShape(self._storage, cache_key, shape_xml_getter, self._slide)
         if shape_type == ShapeType.PLACEHOLDER:
-            return PlaceholderShape(self._storage, cache_key, shape_xml, self._slide)
+            return PlaceholderShape(self._storage, cache_key, shape_xml_getter, self._slide)
         if shape_type == ShapeType.UNKNOWN:
-            return UnknownShape(self._storage, cache_key, shape_xml, self._slide)
+            return UnknownShape(self._storage, cache_key, shape_xml_getter, self._slide)

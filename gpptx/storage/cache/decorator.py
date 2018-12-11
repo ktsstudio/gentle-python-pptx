@@ -26,6 +26,15 @@ def cache_local_property(f: Callable):
     return _CacheDecoratorProperty(f, do_use_persisting_cache=False)
 
 
+def clear_decorator_cache(obj: CacheDecoratable, func_name: str,
+                          args: Collection[Any] = None, kwargs: Dict[str, Any] = None):
+    call_cache_key_name = _make_call_cache_key_name(func_name, args, kwargs)
+    # noinspection PyProtectedMember
+    son_cache_key = obj._storage_cache_key.make_son(call_cache_key_name)
+    # noinspection PyProtectedMember
+    obj._storage.cacher.delete_from_any_cache(son_cache_key)
+
+
 class _BaseCacheDecorator(ABC):
     def __init__(self, do_use_persisting_cache: bool):
         self._do_use_persisting_cache = do_use_persisting_cache
@@ -38,8 +47,7 @@ class _BaseCacheDecorator(ABC):
         # noinspection PyProtectedMember
         if not fn_self._storage_cache_key.do_disable_cache:
             # noinspection PyProtectedMember
-            call_cache_key = self._make_call_cache_key(fn_self._storage_cache_key,
-                                                       fn_name, args, kwargs,
+            call_cache_key = self._make_call_cache_key(fn_self._storage_cache_key, fn_name, args, kwargs,
                                                        do_note_args_in_cache=do_note_args_in_cache)
         else:
             call_cache_key = None
@@ -63,13 +71,14 @@ class _BaseCacheDecorator(ABC):
             self._save_to_cache(call_cache_key, value, fn_self)
         return value
 
-    def _make_call_cache_key(self, storage_cache_key: CacheKey,
+    @staticmethod
+    def _make_call_cache_key(storage_cache_key: CacheKey,
                              fn_name: str, args: Collection[Any], kwargs: Dict[str, Any],
                              do_note_args_in_cache: bool):
         if do_note_args_in_cache:
-            call_cache_key_name = self._make_call_cache_key_name(fn_name, args, kwargs)
+            call_cache_key_name = _make_call_cache_key_name(fn_name, args, kwargs)
         else:
-            call_cache_key_name = self._make_call_cache_key_name(fn_name)
+            call_cache_key_name = _make_call_cache_key_name(fn_name)
         return storage_cache_key.make_son(call_cache_key_name)
 
     def _get_from_cache(self, call_cache_key: CacheKey, fn_self: CacheDecoratable):
@@ -98,27 +107,6 @@ class _BaseCacheDecorator(ABC):
             return storage.cacher.cache_persist
         else:
             return storage.cacher.cache_local
-
-    @staticmethod
-    def _make_call_cache_key_name(func_name: str, args: Collection[Any] = None, kwargs: Dict[str, Any] = None) -> str:
-        parts: List[str] = list()
-        parts.append(func_name)
-        if args is not None and len(args) != 0:
-            for i, it in enumerate(args):
-                parts.append(str(i))
-                parts.append(str(it))
-        if kwargs is not None and len(kwargs) != 0:
-            for k, v in kwargs.items():
-                parts.append(str(k))
-                parts.append(str(v))
-        return '.'.join(parts)
-
-    def _clear_cache(self, fn_self: CacheDecoratable, fn_name: str) -> None:
-        call_cache_key_name = self._make_call_cache_key_name(fn_name)
-        # noinspection PyProtectedMember
-        son_cache_key = fn_self._storage_cache_key.make_son(call_cache_key_name)
-        # noinspection PyProtectedMember
-        fn_self._storage.cacher.delete_from_any_cache(son_cache_key)
 
 
 class _CacheDecoratorMethod(_BaseCacheDecorator):
@@ -154,9 +142,6 @@ class _CacheDecoratorMethod(_BaseCacheDecorator):
         self._unserializer_fn = unserializer_fn
         return self
 
-    def clear_cache(self, cache_decoratable: CacheDecoratable) -> None:
-        self._clear_cache(cache_decoratable, self._fn.__name__)
-
 
 class _CacheDecoratorProperty(_BaseCacheDecorator):
     _DECORATOR_MEMBERS = ('_do_use_persisting_cache', '_serializer_fn', '_unserializer_fn', '_getter_fn', '_setter_fn')
@@ -165,7 +150,6 @@ class _CacheDecoratorProperty(_BaseCacheDecorator):
         super().__init__(do_use_persisting_cache)
         self._getter_fn = getter_fn
         self._setter_fn: Callable[[Any], None] = None
-        update_wrapper(self, self._getter_fn, assigned=WRAPPER_ASSIGNMENTS, updated=())
 
     def __get__(self, fn_self: CacheDecoratable, fn_cls: Type) -> Any:
         return self._call(self._getter_fn, self._getter_fn.__name__, fn_self, do_note_args_in_cache=False)
@@ -174,7 +158,7 @@ class _CacheDecoratorProperty(_BaseCacheDecorator):
         if self._setter_fn is None:
             raise AttributeError
         self._setter_fn(fn_self, value)
-        self._clear_cache(fn_self, self._getter_fn.__name__)
+        clear_decorator_cache(fn_self, self._getter_fn.__name__)
 
     def __getattr__(self, k: str) -> Any:
         if k in self._DECORATOR_MEMBERS:
@@ -199,5 +183,17 @@ class _CacheDecoratorProperty(_BaseCacheDecorator):
         self._unserializer_fn = unserializer_fn
         return self
 
-    def clear_cache(self, cache_decoratable: CacheDecoratable) -> None:
-        self._clear_cache(cache_decoratable, self._fn.__name__)
+
+def _make_call_cache_key_name(func_name: str, args: Collection[Any] = None, kwargs: Dict[str, Any] = None) -> str:
+    parts: List[str] = list()
+    parts.append(func_name)
+    if args is not None and len(args) != 0:
+        for i, it in enumerate(args):
+            parts.append(str(i))
+            parts.append(str(it))
+    if kwargs is not None and len(kwargs) != 0:
+        for k, v in kwargs.items():
+            parts.append(str(k))
+            parts.append(str(v))
+    return '.'.join(parts)
+
