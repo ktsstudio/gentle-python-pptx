@@ -10,7 +10,7 @@ from gpptx.storage.cache.decorator import cache_local, CacheDecoratable, cache_p
     cache_local_property, clear_decorator_cache
 from gpptx.storage.cache.lazy_element_tree import LazyElementTreeList, LazyElementTree
 from gpptx.storage.storage import PresentationStorage
-from gpptx.types.color import Color, NoneColor
+from gpptx.types.color import Color
 from gpptx.types.emu import Emu
 from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.list import first_or_none
@@ -99,7 +99,8 @@ class Run(CacheDecoratableXmlNode):
         if color is not None:
             return color.rgb_str
         if self.do_use_defaults_when_null:
-            return '000000'
+            theme = self.paragraph.text_frame.shape.slide.theme
+            return theme.color_rgbs['tx1']
         return None
 
     @cache_persist_property
@@ -141,8 +142,6 @@ class Run(CacheDecoratableXmlNode):
             if clr_xml is not None:
                 color_resolver = self.paragraph.text_frame.shape.color_resolver
                 return color_resolver.make_color(clr_xml)
-        if self.do_use_defaults_when_null:
-            return NoneColor()
         return None
 
     def _get_attrib(self, name: str) -> Any:

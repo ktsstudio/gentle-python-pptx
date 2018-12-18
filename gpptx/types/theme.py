@@ -44,9 +44,9 @@ class Theme(CacheDecoratableXmlNode):
             result[tag_name] = color
 
         color_map = self._slide_master.xml.xpath('p:clrMap[1]', namespaces=pptx_xml_ns)[0]
-        result['bg1'] = result[color_map.attrib['bg1']]
-        result['tx1'] = result[color_map.attrib['tx1']]
-        result['bg2'] = result[color_map.attrib['bg2']]
-        result['tx2'] = result[color_map.attrib['tx2']]
+        result['bg1'] = result.get(color_map.attrib['bg1'], '000000')
+        result['tx1'] = result.get(color_map.attrib['tx1'], '000000')
+        result['bg2'] = result.get(color_map.attrib['bg2'], '000000')
+        result['tx2'] = result.get(color_map.attrib['tx2'], '000000')
 
         return result
