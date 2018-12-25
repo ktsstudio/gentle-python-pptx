@@ -88,6 +88,8 @@ class Shape(CacheDecoratableXmlNode, ABC):
     @x.setter
     def x(self, v: Emu) -> None:
         if self._xfrm_off is None:
+            if self._sp_pr is None:
+                self._make_new_sp_pr()
             if self._xfrm is None:
                 self._make_new_xfrm()
             else:
@@ -116,6 +118,8 @@ class Shape(CacheDecoratableXmlNode, ABC):
     @y.setter
     def y(self, v: Emu) -> None:
         if self._xfrm_off is None:
+            if self._sp_pr is None:
+                self._make_new_sp_pr()
             if self._xfrm is None:
                 self._make_new_xfrm()
             else:
@@ -144,6 +148,8 @@ class Shape(CacheDecoratableXmlNode, ABC):
     @width.setter
     def width(self, v: Emu) -> None:
         if self._xfrm_ext is None:
+            if self._sp_pr is None:
+                self._make_new_sp_pr()
             if self._xfrm is None:
                 self._make_new_xfrm()
             else:
@@ -172,6 +178,8 @@ class Shape(CacheDecoratableXmlNode, ABC):
     @height.setter
     def height(self, v: Emu) -> None:
         if self._xfrm_ext is None:
+            if self._sp_pr is None:
+                self._make_new_sp_pr()
             if self._xfrm is None:
                 self._make_new_xfrm()
             else:
@@ -188,8 +196,14 @@ class Shape(CacheDecoratableXmlNode, ABC):
         return first_or_none(self.xml.xpath('.//p:cNvPr[1]', namespaces=pptx_xml_ns))
 
     @cache_local_property
+    def _sp_pr(self) -> Optional[ElementTree]:
+        return first_or_none(self.xml.xpath('p:spPr[1]', namespaces=pptx_xml_ns))
+
+    @cache_local_property
     def _xfrm(self) -> Optional[ElementTree]:
-        return first_or_none(self.xml.xpath('a:xfrm[1]', namespaces=pptx_xml_ns))
+        if self._sp_pr is None:
+            return None
+        return first_or_none(self._sp_pr.xpath('a:xfrm[1]', namespaces=pptx_xml_ns))
 
     @cache_local_property
     def _xfrm_off(self) -> Optional[ElementTree]:
@@ -203,9 +217,14 @@ class Shape(CacheDecoratableXmlNode, ABC):
             return None
         return first_or_none(self._xfrm.xpath('a:ext[1]', namespaces=pptx_xml_ns))
 
+    def _make_new_sp_pr(self):
+        new_sp_pr = etree.Element('{%s}spPr' % pptx_xml_ns['p'])
+        self.xml.append(new_sp_pr)
+        update_decorator_cache(self, '_sp_pr', new_sp_pr, do_change_persisting_cache=False)
+
     def _make_new_xfrm(self):
         new_xfrm = etree.Element('{%s}xfrm' % pptx_xml_ns['a'])
-        self.xml.append(new_xfrm)
+        self._sp_pr.append(new_xfrm)
         update_decorator_cache(self, '_xfrm', new_xfrm, do_change_persisting_cache=False)
         self._make_new_xfrm_off()
         self._make_new_xfrm_ext()
