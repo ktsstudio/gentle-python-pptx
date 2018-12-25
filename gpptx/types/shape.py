@@ -11,7 +11,7 @@ from gpptx.storage.cache.decorator import cache_persist_property, cache_local_pr
     help_lazy_list_property, help_lazy_property
 from gpptx.storage.cache.lazy import Lazy, LazyList, LazyByFunction
 from gpptx.storage.storage import PresentationStorage
-from gpptx.types.color_resolver import ColorResolver
+from gpptx.types.color_maker import ColorMaker
 from gpptx.types.emu import Emu
 from gpptx.types.fill import Fill
 from gpptx.types.image import Image
@@ -180,8 +180,8 @@ class Shape(CacheDecoratableXmlNode, ABC):
         self.save_xml()
 
     @property
-    def color_resolver(self) -> ColorResolver:
-        return ColorResolver(self)
+    def color_maker(self) -> ColorMaker:
+        return ColorMaker(self)
 
     @cache_local_property
     def _c_nv_pr(self) -> Optional[ElementTree]:
@@ -300,7 +300,7 @@ class GroupShape(Shape):
         from gpptx.types.shapes_coll import ShapesCollection
 
         return ShapesCollection(self._storage, self._storage_cache_key.make_son('shapes'),
-                                self._shape_xmls, self._shapes_root, self._slide_like)
+                                self._shape_xmls, self.shapes_root_getter, self._slide_like)
 
     @cache_persist_property
     def children_offset_x(self) -> Emu:
@@ -359,7 +359,7 @@ class GroupShape(Shape):
         return LazyList(find)
 
     @help_lazy_property
-    def _shapes_root(self) -> Lazy:
+    def shapes_root_getter(self) -> Lazy:
         def find():
             return self.xml
 

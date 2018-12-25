@@ -152,9 +152,13 @@ class UnknownColor(Color):
         return _parse_alpha(self.xml)
 
 
-class NoneColor(Color):
-    def __init__(self):
+class CustomSetColor(Color):
+    __slots__ = ('_rgb', '_alpha')
+
+    def __init__(self, rgb: str = '000000', alpha: float = 1):
         super().__init__()
+        self._rgb = rgb
+        self._alpha = alpha
 
     @property
     def xml(self) -> ElementTree:
@@ -165,11 +169,11 @@ class NoneColor(Color):
 
     @property
     def rgb_str(self) -> str:
-        return '000000'
+        return self._rgb
 
     @property
     def alpha(self) -> float:
-        return 1
+        return self._alpha
 
 
 def _parse_color_change(clr_xml: ElementTree, r: int, g: int, b: int) -> Tuple[int, int, int]:

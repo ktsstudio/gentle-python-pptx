@@ -14,6 +14,7 @@ from gpptx.storage.storage import PresentationStorage
 from gpptx.types.shapes_coll import ShapesCollection
 from gpptx.types.theme import Theme
 from gpptx.types.xml_node import CacheDecoratableXmlNode
+from gpptx.util.list import first_or_none
 
 
 class SlideLike(CacheDecoratableXmlNode, ABC):
@@ -27,7 +28,7 @@ class SlideLike(CacheDecoratableXmlNode, ABC):
     @property
     def shapes(self) -> ShapesCollection:
         return ShapesCollection(self._storage, self._storage_cache_key.make_son('shapes'),
-                                self._shape_xmls, self._shapes_root, self)
+                                self._shape_xmls, self.shapes_root_getter, self)
 
     @property
     def theme(self) -> Theme:
@@ -52,9 +53,9 @@ class SlideLike(CacheDecoratableXmlNode, ABC):
         return LazyList(find)
 
     @help_lazy_property
-    def _shapes_root(self) -> Lazy:
+    def shapes_root_getter(self) -> Lazy:
         def find():
-            return self.xml.xpath('p:cSld[1]/p:spTree[1]', namespaces=pptx_xml_ns)
+            return first_or_none(self.xml.xpath('p:cSld[1]/p:spTree[1]', namespaces=pptx_xml_ns))
 
         return LazyByFunction(find)
 

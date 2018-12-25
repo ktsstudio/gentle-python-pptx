@@ -103,6 +103,14 @@ class LazyList:
         self._deleted_indexes.add(index)
         self._notify_new_deleted_indexes()
 
+    def clear(self):
+        self._buffer = list()
+        self._length = 1
+        self._deleted_indexes = set()
+        self._notify_new_buffer()
+        self._notify_new_length()
+        self._notify_new_deleted_indexes()
+
     @property
     def len_with_holes(self):
         self._ensure_length()

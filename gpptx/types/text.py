@@ -10,7 +10,7 @@ from gpptx.storage.cache.decorator import cache_local, CacheDecoratable, cache_p
     cache_local_property, clear_decorator_cache, help_lazy_list_property
 from gpptx.storage.cache.lazy import LazyList, Lazy
 from gpptx.storage.storage import PresentationStorage
-from gpptx.types.color import Color
+from gpptx.types.color import Color, CustomSetColor
 from gpptx.types.emu import Emu
 from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.annotations import dangerous_method
@@ -74,14 +74,14 @@ class Run(CacheDecoratableXmlNode):
 
     @cache_persist_property
     def font_name(self) -> Optional[str]:
-        latin_xml = self._get_elem('a:latin')
+        latin_xml = self._get_elem('a:latin', do_recursive_find=self.do_use_defaults_when_null)
         if latin_xml is not None:
             return latin_xml.get('typeface')
         return None
 
     @cache_persist_property
     def font_size(self) -> Optional[Emu]:
-        sz_str = self._get_attrib('sz')
+        sz_str = self._get_attrib('sz', do_recursive_find=self.do_use_defaults_when_null)
         if sz_str is not None:
             return Emu.from_centripoints(int(sz_str))
         return self._DEFAULT_FONT_SIZE
@@ -99,9 +99,6 @@ class Run(CacheDecoratableXmlNode):
         color = self._get_color()
         if color is not None:
             return color.rgb_str
-        if self.do_use_defaults_when_null:
-            theme = self.paragraph.text_frame.shape.slide.theme
-            return theme.color_rgbs['tx1']
         return None
 
     @cache_persist_property
@@ -109,20 +106,18 @@ class Run(CacheDecoratableXmlNode):
         color = self._get_color()
         if color is not None:
             return color.alpha
-        if self.do_use_defaults_when_null:
-            return 1
         return None
 
     @cache_persist_property
     def is_bold(self) -> Optional[bool]:
-        b_str = self._get_attrib('b')
+        b_str = self._get_attrib('b', do_recursive_find=self.do_use_defaults_when_null)
         if b_str is not None:
             return bool(b_str)
         return False
 
     @cache_persist_property
     def is_italic(self) -> Optional[bool]:
-        i_str = self._get_attrib('i')
+        i_str = self._get_attrib('i', do_recursive_find=self.do_use_defaults_when_null)
         if i_str is not None:
             return bool(i_str)
         return False
@@ -137,16 +132,24 @@ class Run(CacheDecoratableXmlNode):
 
     @cache_local
     def _get_color(self) -> Optional[Color]:
-        fill_xml = self._get_elem('a:solidFill')
+        # find xml
+        fill_xml = self._get_elem('a:solidFill', do_recursive_find=self.do_use_defaults_when_null)
+
         if fill_xml is not None:
             clr_xml = first_or_none(list(fill_xml))
             if clr_xml is not None:
-                color_resolver = self.paragraph.text_frame.shape.color_resolver
+                color_resolver = self.paragraph.text_frame.shape.color_maker
                 return color_resolver.make_color(clr_xml)
+
+        # use theme
+        if self.do_use_defaults_when_null:
+            theme = self.paragraph.text_frame.shape.slide.theme
+            return CustomSetColor(theme.color_rgbs['tx1'])
+        
         return None
 
-    def _get_attrib(self, name: str) -> Any:
-        if self.do_use_defaults_when_null:
+    def _get_attrib(self, name: str, do_recursive_find: bool) -> Any:
+        if do_recursive_find:
             # noinspection PyProtectedMember
             sources = (self._r_pr, self.paragraph._def_r_pr, self.text_frame._list_def_r_pr, self.text_frame._def_r_pr)
         else:
@@ -158,8 +161,8 @@ class Run(CacheDecoratableXmlNode):
                     return value
         return None
 
-    def _get_elem(self, name: str) -> Any:
-        if self.do_use_defaults_when_null:
+    def _get_elem(self, name: str, do_recursive_find: bool) -> Any:
+        if do_recursive_find:
             # noinspection PyProtectedMember
             sources = (self._r_pr, self.paragraph._def_r_pr, self.text_frame._list_def_r_pr, self.text_frame._def_r_pr)
         else:
@@ -194,7 +197,7 @@ class RunCollection(CacheDecoratable):
         return len(self._run_xml_getters)
 
     @dangerous_method
-    def add_run(self, new_xml: ElementTree = None) -> Run:
+    def add_run(self, new_xml: ElementTree = None) -> int:
         # create
         if new_xml is None:
             new_xml = etree.Element('{%s}r' % pptx_xml_ns['a'])
@@ -211,7 +214,7 @@ class RunCollection(CacheDecoratable):
 
         # make run object
         new_run_index = self._run_xml_getters.len_with_holes - 1
-        return Run(self._storage, self._storage_cache_key.make_son(str(new_run_index)), new_xml, self._paragraph)
+        return new_run_index
 
     @dangerous_method
     def delete_run(self, index: int, do_affect_xml: bool = True, i_wont_save_cache: bool = False) -> None:
@@ -384,7 +387,9 @@ class Paragraph(CacheDecoratableXmlNode):
 
     @cache_local_property
     def _def_r_pr(self) -> Optional[ElementTree]:
-        return first_or_none(self.xml.xpath('a:defRPr[1]', namespaces=pptx_xml_ns))
+        if self._p_pr is None:
+            return None
+        return first_or_none(self._p_pr.xpath('a:defRPr[1]', namespaces=pptx_xml_ns))
 
     @help_lazy_list_property
     def _run_xmls(self) -> LazyList:
@@ -417,16 +422,17 @@ class ParagraphCollection(CacheDecoratable):
         return len(self._paragraph_xml_getters)
 
     @dangerous_method
-    def add_paragraph(self, new_xml: ElementTree = None) -> int:
+    def add_paragraph(self, new_xml: ElementTree = None, do_auto_new_xml_with_run: bool = True) -> int:
         # create
         if new_xml is None:
             new_xml = etree.Element('{%s}p' % pptx_xml_ns['a'])
-            new_xml_r = etree.Element('{%s}r' % pptx_xml_ns['a'])
-            new_xml.append(new_xml_r)
-            new_xml_r_pr = etree.Element('{%s}rPr' % pptx_xml_ns['a'])
-            new_xml_r.append(new_xml_r_pr)
-            new_xml_t = etree.Element('{%s}t' % pptx_xml_ns['a'])
-            new_xml_r.append(new_xml_t)
+            if do_auto_new_xml_with_run:
+                new_xml_r = etree.Element('{%s}r' % pptx_xml_ns['a'])
+                new_xml.append(new_xml_r)
+                new_xml_r_pr = etree.Element('{%s}rPr' % pptx_xml_ns['a'])
+                new_xml_r.append(new_xml_r_pr)
+                new_xml_t = etree.Element('{%s}t' % pptx_xml_ns['a'])
+                new_xml_r.append(new_xml_t)
 
         self._text_frame.xml.append(new_xml)
         self._text_frame.save_xml()
@@ -452,6 +458,16 @@ class ParagraphCollection(CacheDecoratable):
 
         # update cache
         self._paragraph_xml_getters.pop(index)
+
+    @dangerous_method
+    def clear(self) -> None:
+        # delete
+        for paragraph_xml_getter in self._paragraph_xml_getters:
+            self._text_frame.xml.remove(paragraph_xml_getter())
+        self._text_frame.save_xml()
+
+        # update cache
+        self._paragraph_xml_getters.clear()
 
 
 class TextFrame(CacheDecoratableXmlNode):

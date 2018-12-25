@@ -220,7 +220,7 @@ class _CacheDecoratorLazyHelperProperty:
         value_key = fn_self._storage_cache_key.make_son(self._fn.__name__)
 
         # noinspection PyProtectedMember
-        value = fn_self._storage.cacher.get_from_local_cache(value_key)
+        value, _ = fn_self._storage.cacher.get_from_local_cache(value_key)
 
         def notify_new_value(new_value: Any) -> None:
             # noinspection PyProtectedMember

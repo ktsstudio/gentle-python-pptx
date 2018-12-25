@@ -3,7 +3,7 @@ from lxml.etree import ElementTree
 from gpptx.types.color import ColorType, Color, SrgbColor, HslColor, PresetColor, SchemeColor, UnknownColor
 
 
-class ColorResolver:
+class ColorMaker:
     __slots__ = ('_shape',)
 
     def __init__(self, shape):
