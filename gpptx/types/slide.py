@@ -8,9 +8,8 @@ from gpptx.pptx_tools.paths import make_rels_path, SLIDE_LAYOUTS_PATH_PREFIX, \
 from gpptx.pptx_tools.rels import find_first_relation_path_with_prefix
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorator import cache_persist_property, cache_local, clear_decorator_cache, \
-    cache_local_property
-from gpptx.storage.cache.lazy_element_tree import LazyElementTreeList
+from gpptx.storage.cache.decorator import cache_persist_property, help_lazy_list_property, help_lazy_property
+from gpptx.storage.cache.lazy import LazyList, Lazy, LazyByFunction
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.shapes_coll import ShapesCollection
 from gpptx.types.theme import Theme
@@ -27,35 +26,37 @@ class SlideLike(CacheDecoratableXmlNode, ABC):
 
     @property
     def shapes(self) -> ShapesCollection:
-        return ShapesCollection(self._storage, self._storage_cache_key.make_son('shapes'), self._shape_xmls, self)
+        return ShapesCollection(self._storage, self._storage_cache_key.make_son('shapes'),
+                                self._shape_xmls, self._shapes_root, self)
 
     @property
     def theme(self) -> Theme:
         raise NotImplementedError
 
-    @cache_local_property
-    def _shape_xmls(self) -> LazyElementTreeList:
-        return LazyElementTreeList(self._find_shape_xmls, self._shapes_count,
-                                   invalidate_length_fn=lambda: clear_decorator_cache(self, '_shapes_count'))
+    @help_lazy_list_property
+    def _shape_xmls(self) -> LazyList:
+        def find() -> List[ElementTree]:
+            els = self.xml.xpath('p:cSld[1]/p:spTree[1]/*', namespaces=pptx_xml_ns)
 
-    @cache_local
-    def _find_shape_xmls(self) -> List[ElementTree]:
-        els = self.xml.xpath('p:cSld/p:spTree/*', namespaces=pptx_xml_ns)
+            els_at_indexes_to_remove = list()
+            for i, el in enumerate(els):
+                if el.tag.endswith('Pr'):
+                    els_at_indexes_to_remove.append(i)
+            delete_shift = 0
+            for i in els_at_indexes_to_remove:
+                els.pop(i - delete_shift)
+                delete_shift += 1
 
-        els_at_indexes_to_remove = list()
-        for i, el in enumerate(els):
-            if el.tag.endswith('Pr'):
-                els_at_indexes_to_remove.append(i)
-        delete_shift = 0
-        for i in els_at_indexes_to_remove:
-            els.pop(i - delete_shift)
-            delete_shift += 1
+            return els
 
-        return els
+        return LazyList(find)
 
-    @cache_persist_property
-    def _shapes_count(self) -> int:
-        return len(self._find_shape_xmls())
+    @help_lazy_property
+    def _shapes_root(self) -> Lazy:
+        def find():
+            return self.xml.xpath('p:cSld[1]/p:spTree[1]', namespaces=pptx_xml_ns)
+
+        return LazyByFunction(find)
 
 
 class SlideMaster(SlideLike):

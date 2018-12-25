@@ -1,40 +1,75 @@
-from typing import Union, Any, List, Optional, Dict
+import copy
+from typing import Union, Any, List, Optional, Dict, Iterator, Tuple
+
+from lxml.etree import ElementTree
 
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorator import cache_local, CacheDecoratable, cache_persist
-from gpptx.storage.cache.lazy_element_tree import LazyElementTreeList
+from gpptx.storage.cache.decorator import cache_local, CacheDecoratable, cache_persist, cache_persist_property, \
+    clear_decorator_cache, update_decorator_cache
+from gpptx.storage.cache.lazy import LazyList, Lazy
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.shape import Shape, GroupShape, ShapeType, TextShape, PatternShape, PatternType, ImageShape, \
     PlaceholderShape, UnknownShape
+from gpptx.util.annotations import dangerous_method
 
 
 class ShapesCollection(CacheDecoratable):
-    __slots__ = ('_shape_xml_getters', '_slide')
+    __slots__ = ('_shape_xml_getters', '_shapes_root_getter', '_slide')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getters: LazyElementTreeList, slide):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey,
+                 shape_xml_getters: LazyList, shapes_root_getter: Lazy, slide):
         from gpptx.types.slide import SlideLike
 
         self._storage = storage
         self._storage_cache_key = cache_key
         self._shape_xml_getters = shape_xml_getters
+        self._shapes_root_getter = shapes_root_getter
         self._slide: SlideLike = slide
 
-    def __getitem__(self, shape_id: int) -> Shape:
-        shape = self.get(shape_id)
-        if shape is None:
-            raise ValueError(f'No shape with id {shape_id}')
-        return shape
-
     def __iter__(self):
-        for shape_index in range(len(self._shape_xml_getters)):
-            yield self._make_shape(self._get_shape_type(shape_index), shape_index)
+        for shape_index in self._shape_xml_getters.iter_indexes():
+            yield self.make_shape(shape_index)
 
     def __len__(self):
         return len(self._shape_xml_getters)
 
-    def get(self, shape_id: int, default=None) -> Union[Shape, Any]:
-        return self.flatten_as_dict(keep_groups=True).get(shape_id, default=default)
+    def return_recursive(self, shape_id: int) -> Union[Shape, Any]:
+        shape = self.get_recursive(shape_id)
+        if shape is None:
+            raise ValueError(f'No shape with id {shape_id}')
+        return shape
+
+    def get_recursive(self, shape_id: int, default=None) -> Union[Shape, Any]:
+        return self.flatten_as_dict(keep_groups=True).get(shape_id, default)
+
+    def return_direct(self, shape_id: int) -> Shape:
+        shape = self.get_direct(shape_id)
+        if shape is None:
+            raise ValueError(f'No shape with id {shape_id}')
+        return shape
+
+    def get_direct(self, shape_id: int, default=None) -> Union[Shape, Any]:
+        shape_index = self.get_index_direct(shape_id)
+        if shape_index is None:
+            return default
+        return self.make_shape(shape_index)
+
+    def return_index_direct(self, shape_id: int) -> int:
+        index = self.get_index_direct(shape_id)
+        if index is None:
+            raise ValueError(f'No shape with id {shape_id}')
+        return index
+
+    def get_index_direct(self, shape_id: int, default=None) -> Union[int, Any]:
+        shape_index = None
+        for i in self._shape_xml_getters.iter_indexes():
+            shape = self.make_shape(i, fast=True)
+            if shape.shape_id == shape_id:
+                shape_index = i
+        if shape_index is None:
+            return default
+        return shape_index
 
     @cache_local
     def get_shape_parents_bloodline(self, shape_id: int) -> List[Shape]:
@@ -59,11 +94,20 @@ class ShapesCollection(CacheDecoratable):
             return None
         return parents_line[-1]
 
-    def add(self) -> None:
-        raise NotImplementedError  # TODO
+    @cache_persist_property
+    def last_shape_id(self) -> int:
+        return max(it.shape_id for it in self.flatten())
 
-    def delete(self, shape_id: int) -> None:
-        raise NotImplementedError  # TODO
+    def iter_enumerate(self) -> Iterator[Tuple[int, Shape]]:
+        for shape_index in self._shape_xml_getters.iter_indexes():
+            yield shape_index, self.make_shape(shape_index)
+
+    def make_shape(self, shape_index: int, fast: bool = False):
+        if fast:
+            shape_type = ShapeType.UNKNOWN
+        else:
+            shape_type = self._get_shape_type(shape_index)
+        return self._make_shape(shape_type, shape_index)
 
     @cache_local
     def flatten(self, keep_groups: bool = True) -> List[Shape]:
@@ -83,6 +127,58 @@ class ShapesCollection(CacheDecoratable):
     @cache_local
     def flatten_as_dict(self, keep_groups: bool = True) -> Dict[int, Shape]:
         return {shape.shape_id: shape for shape in self.flatten(keep_groups=keep_groups)}
+
+    @dangerous_method
+    def add(self, new_xml: ElementTree) -> int:
+        raise NotImplementedError  # TODO
+
+    @dangerous_method
+    def delete(self, shape_id: int, do_affect_xml: bool = True, i_wont_save_cache: bool = False) -> None:
+        if not do_affect_xml:
+            assert i_wont_save_cache
+
+        # find
+        shape_index = self.return_index_direct(shape_id)
+
+        # delete
+        if do_affect_xml:
+            shape_xml = self._shape_xml_getters[shape_index]()
+            shape_xml.getparent().remove(shape_xml)
+            self._slide.save_xml()
+
+        # update cache
+        clear_decorator_cache(self, 'last_shape_id')
+        clear_decorator_cache(self, 'flatten')
+        clear_decorator_cache(self, 'flatten_as_dict')
+
+        self._shape_xml_getters.pop(shape_index)
+
+    @dangerous_method
+    def duplicate(self, shape_id: int) -> int:
+        shape_index = self.return_index_direct(shape_id)
+        shape = self.make_shape(shape_index, fast=True)
+        last_shape_id = self.last_shape_id
+
+        # copy
+        xml_copy = copy.deepcopy(shape.xml)
+        copy_shape_id = last_shape_id + 1
+        xml_copy.xpath('p:nvSpPr[1]/p:cNvPr[1]', namespaces=pptx_xml_ns)[0].set('id', str(copy_shape_id))
+
+        # add
+        self._slide.xml.append(xml_copy)
+        self._slide.save_xml()
+
+        # update cache
+        self._shape_xml_getters.append(xml_copy)
+        update_decorator_cache(self, 'last_shape_id', value=copy_shape_id,
+                               do_change_persisting_cache=True)
+        update_decorator_cache(self, '_get_shape_type', func_args=(len(self._shape_xml_getters)-1,),
+                               value=self._get_shape_type(shape_index).value,
+                               do_change_persisting_cache=True)
+        clear_decorator_cache(self, 'flatten')
+        clear_decorator_cache(self, 'flatten_as_dict')
+
+        return copy_shape_id
 
     @cache_persist
     def _get_shape_type(self, shape_index: int) -> ShapeType:

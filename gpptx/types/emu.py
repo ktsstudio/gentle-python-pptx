@@ -1,6 +1,6 @@
 class Emu(int):
-    _EMUS_PER_INCH = 914400
     _EMUS_PER_CENTIPOINT = 127
+    _EMUS_PER_INCH = 914400
     _EMUS_PER_CM = 360000
     _EMUS_PER_MM = 36000
     _EMUS_PER_PT = 12700
@@ -12,12 +12,12 @@ class Emu(int):
         return int.__new__(cls, emu)
 
     @property
-    def inches(self) -> float:
-        return self / self._EMUS_PER_INCH
-
-    @property
     def centipoints(self) -> int:
         return self // self._EMUS_PER_CENTIPOINT
+
+    @property
+    def inches(self) -> float:
+        return self / self._EMUS_PER_INCH
 
     @property
     def cm(self) -> float:
@@ -40,25 +40,25 @@ class Emu(int):
         return self.pt / self._PT_PER_PX
 
     @classmethod
-    def from_inches(cls, inches: int):
-        return cls(inches * cls._EMUS_PER_INCH)
-
-    @classmethod
     def from_centripoints(cls, centripoints: int):
         return cls(centripoints * cls._EMUS_PER_CENTIPOINT)
 
     @classmethod
-    def from_cm(cls, cm: int):
+    def from_inches(cls, inches: float):
+        return cls(inches * cls._EMUS_PER_INCH)
+
+    @classmethod
+    def from_cm(cls, cm: float):
         return cls(cm * cls._EMUS_PER_CM)
 
     @classmethod
-    def from_mm(cls, mm: int):
+    def from_mm(cls, mm: float):
         return cls(mm * cls._EMUS_PER_MM)
 
     @classmethod
-    def from_pt(cls, pt: int):
+    def from_pt(cls, pt: float):
         return cls(pt * cls._EMUS_PER_PT)
 
     @classmethod
-    def from_px(cls, px: int):
+    def from_px(cls, px: float):
         return cls(px * cls._PT_PER_PX * cls._EMUS_PER_PT)

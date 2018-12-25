@@ -7,12 +7,13 @@ from lxml.etree import ElementTree
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
 from gpptx.storage.cache.decorator import cache_local, CacheDecoratable, cache_persist_property, \
-    cache_local_property, clear_decorator_cache
-from gpptx.storage.cache.lazy_element_tree import LazyElementTreeList, LazyElementTree
+    cache_local_property, clear_decorator_cache, help_lazy_list_property
+from gpptx.storage.cache.lazy import LazyList, Lazy
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.color import Color
 from gpptx.types.emu import Emu
 from gpptx.types.xml_node import CacheDecoratableXmlNode
+from gpptx.util.annotations import dangerous_method
 from gpptx.util.list import first_or_none
 
 
@@ -33,7 +34,7 @@ class Run(CacheDecoratableXmlNode):
 
     __slots__ = ('_run_xml_getter', '_paragraph')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, run_xml_getter: LazyElementTree,
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, run_xml_getter: Lazy,
                  paragraph):
         super().__init__()
         self._storage = storage
@@ -175,22 +176,24 @@ class RunCollection(CacheDecoratable):
     __slots__ = ('_run_xml_getters', '_paragraph')
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey,
-                 run_xml_getters: LazyElementTreeList, paragraph):
+                 run_xml_getters: LazyList, paragraph):
         self._storage = storage
         self._storage_cache_key = cache_key
         self._run_xml_getters = run_xml_getters
         self._paragraph: Paragraph = paragraph
 
     def __getitem__(self, index: int) -> Run:
-        return Run(self._storage, self._storage_cache_key.make_son(str(index)), self._run_xml_getters[index], self._paragraph)
+        return Run(self._storage, self._storage_cache_key.make_son(str(index)), self._run_xml_getters[index],
+                   self._paragraph)
 
     def __iter__(self):
-        for i, xml in enumerate(self._run_xml_getters):
+        for i, xml in self._run_xml_getters.iter_enumerate():
             yield Run(self._storage, self._storage_cache_key.make_son(str(i)), xml, self._paragraph)
 
     def __len__(self):
         return len(self._run_xml_getters)
 
+    @dangerous_method
     def add_run(self, new_xml: ElementTree = None) -> Run:
         # create
         if new_xml is None:
@@ -204,35 +207,32 @@ class RunCollection(CacheDecoratable):
         self._paragraph.save_xml()
 
         # update cache
-        self._run_xml_getters.append(new_xml)  # because it is a pointer, it's ok
+        self._run_xml_getters.append(new_xml)
 
         # make run object
-        new_run_index = len(self._run_xml_getters) - 1
+        new_run_index = self._run_xml_getters.len_with_holes - 1
         return Run(self._storage, self._storage_cache_key.make_son(str(new_run_index)), new_xml, self._paragraph)
 
-    def delete_run(self, index: int, do_affect_xml: bool = True) -> None:
+    @dangerous_method
+    def delete_run(self, index: int, do_affect_xml: bool = True, i_wont_save_cache: bool = False) -> None:
+        if not do_affect_xml:
+            assert i_wont_save_cache
+
         # delete
         if do_affect_xml:
-            self._paragraph.xml.remove(self._run_xml_getters[index]())
+            run_xml = self._run_xml_getters[index]()
+            run_xml.getparent().remove(run_xml)
             self._paragraph.save_xml()
 
         # update cache
-        if do_affect_xml:
-            for i in range(index, len(self._run_xml_getters)):
-                run_cache = self._storage_cache_key.make_son(str(i))
-                self._storage.cacher.delete_from_any_cache(run_cache)
-
-        if do_affect_xml:
-            self._run_xml_getters.pop(index, was_xml_affected_already=True)
-        else:
-            self._run_xml_getters.pop(index, do_affect_xml=False, do_invalidate_len_cache=False)
+        self._run_xml_getters.pop(index)
 
 
 class Paragraph(CacheDecoratableXmlNode):
     __slots__ = ('_paragraph_xml_getter', '_text_frame')
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey,
-                 paragraph_xml_getter: LazyElementTree, text_frame):
+                 paragraph_xml_getter: Lazy, text_frame):
         super().__init__()
         self._storage = storage
         self._storage_cache_key = cache_key
@@ -386,79 +386,78 @@ class Paragraph(CacheDecoratableXmlNode):
     def _def_r_pr(self) -> Optional[ElementTree]:
         return first_or_none(self.xml.xpath('a:defRPr[1]', namespaces=pptx_xml_ns))
 
-    @cache_local_property
-    def _run_xmls(self) -> LazyElementTreeList:
-        return LazyElementTreeList(self._find_run_xmls, self._run_xmls_count,
-                                   invalidate_length_fn=lambda: clear_decorator_cache(self, '_run_xmls_count'))
+    @help_lazy_list_property
+    def _run_xmls(self) -> LazyList:
+        def find():
+            return self.xml.xpath('a:r', namespaces=pptx_xml_ns)
 
-    @cache_local
-    def _find_run_xmls(self) -> List[ElementTree]:
-        return self.xml.xpath('a:r', namespaces=pptx_xml_ns)
-
-    @cache_persist_property
-    def _run_xmls_count(self) -> int:
-        return len(self._find_run_xmls())
+        return LazyList(find)
 
 
 class ParagraphCollection(CacheDecoratable):
     __slots__ = ('_paragraph_xml_getters', '_text_frame')
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey,
-                 paragraph_xml_getters: LazyElementTreeList, text_frame):
+                 paragraph_xml_getters: LazyList, text_frame):
         self._storage = storage
         self._storage_cache_key = cache_key
         self._paragraph_xml_getters = paragraph_xml_getters
         self._text_frame: TextFrame = text_frame
 
     def __getitem__(self, index: int) -> Paragraph:
-        return Paragraph(self._storage, self._storage_cache_key.make_son(str(index)), self._paragraph_xml_getters[index],
+        return Paragraph(self._storage, self._storage_cache_key.make_son(str(index)),
+                         self._paragraph_xml_getters[index],
                          self._text_frame)
 
     def __iter__(self):
-        for i, xml in enumerate(self._paragraph_xml_getters):
+        for i, xml in self._paragraph_xml_getters.iter_enumerate():
             yield Paragraph(self._storage, self._storage_cache_key.make_son(str(i)), xml, self._text_frame)
 
     def __len__(self):
         return len(self._paragraph_xml_getters)
 
-    def add_paragraph(self, new_xml: ElementTree = None) -> Paragraph:
+    @dangerous_method
+    def add_paragraph(self, new_xml: ElementTree = None) -> int:
         # create
         if new_xml is None:
-            raise NotImplementedError  # TODO
+            new_xml = etree.Element('{%s}p' % pptx_xml_ns['a'])
+            new_xml_r = etree.Element('{%s}r' % pptx_xml_ns['a'])
+            new_xml.append(new_xml_r)
+            new_xml_r_pr = etree.Element('{%s}rPr' % pptx_xml_ns['a'])
+            new_xml_r.append(new_xml_r_pr)
+            new_xml_t = etree.Element('{%s}t' % pptx_xml_ns['a'])
+            new_xml_r.append(new_xml_t)
 
         self._text_frame.xml.append(new_xml)
         self._text_frame.save_xml()
 
         # update cache
-        self._text_frame.xml.append(new_xml)  # because it is a pointer
+        # noinspection PyProtectedMember
+        self._text_frame._paragraph_xmls.append(new_xml)
 
         # make run object
-        new_paragraph_index = len(self._paragraph_xml_getters) - 1
-        return Paragraph(self._storage, self._storage_cache_key.make_son(str(new_paragraph_index)), new_xml,
-                         self._text_frame)
+        new_paragraph_index = self._paragraph_xml_getters.len_with_holes - 1
+        return new_paragraph_index
 
-    def delete_paragraph(self, index: int, do_affect_xml: bool = True) -> None:
+    @dangerous_method
+    def delete_paragraph(self, index: int, do_affect_xml: bool = True, i_wont_save_cache: bool = False) -> None:
+        if not do_affect_xml:
+            assert i_wont_save_cache
+
         # delete
         if do_affect_xml:
-            self._text_frame.xml.remove(self._paragraph_xml_getters[index]())
+            paragraph_xml = self._paragraph_xml_getters[index]()
+            paragraph_xml.getparent().remove(paragraph_xml)
             self._text_frame.save_xml()
 
         # update cache
-        if do_affect_xml:
-            for i in range(index, len(self._paragraph_xml_getters)):
-                run_cache = self._storage_cache_key.make_son(str(i))
-                self._storage.cacher.delete_from_any_cache(run_cache)
-
-        if do_affect_xml:
-            self._paragraph_xml_getters.pop(index, was_xml_affected_already=True)
-        else:
-            self._paragraph_xml_getters.pop(index, do_affect_xml=False, do_invalidate_len_cache=False)
+        self._paragraph_xml_getters.pop(index)
 
 
 class TextFrame(CacheDecoratableXmlNode):
     __slots__ = ('_tx_body_xml_getter', '_shape')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, tx_body_xml_getter: LazyElementTree,
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, tx_body_xml_getter: Lazy,
                  shape):
         from gpptx.types.shape import Shape
 
@@ -604,18 +603,12 @@ class TextFrame(CacheDecoratableXmlNode):
     def _list_def_r_pr(self) -> Optional[ElementTree]:
         return first_or_none(self.xml.xpath('a:lstStyle[1]/a:lvl1pPr[1]/a:defRPr[1]', namespaces=pptx_xml_ns))
 
-    @cache_local_property
-    def _paragraph_xmls(self) -> LazyElementTreeList:
-        return LazyElementTreeList(self._find_paragraph_xmls, self._paragraph_xmls_count,
-                                   invalidate_length_fn=lambda: clear_decorator_cache(self, '_paragraph_xmls_count'))
+    @help_lazy_list_property
+    def _paragraph_xmls(self) -> LazyList:
+        def find() -> List[ElementTree]:
+            return self.xml.xpath('a:p', namespaces=pptx_xml_ns)
 
-    @cache_local
-    def _find_paragraph_xmls(self) -> List[ElementTree]:
-        return self.xml.xpath('a:p', namespaces=pptx_xml_ns)
-
-    @cache_persist_property
-    def _paragraph_xmls_count(self) -> int:
-        return len(self._find_paragraph_xmls())
+        return LazyList(find)
 
     @cache_local_property
     def _body_pr(self) -> Optional[ElementTree]:

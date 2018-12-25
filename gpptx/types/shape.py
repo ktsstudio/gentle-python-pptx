@@ -1,14 +1,15 @@
 from abc import ABC
 from enum import Enum
-from typing import Optional, List
+from typing import Optional
 
+from lxml import etree
 from lxml.etree import ElementTree
 
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
-from gpptx.storage.cache.decorator import cache_persist_property, cache_local_property, cache_local, \
-    clear_decorator_cache
-from gpptx.storage.cache.lazy_element_tree import LazyElementTree, LazyElementTreeList, LazyElementTreeByFunction
+from gpptx.storage.cache.decorator import cache_persist_property, cache_local_property, update_decorator_cache, \
+    help_lazy_list_property, help_lazy_property
+from gpptx.storage.cache.lazy import Lazy, LazyList, LazyByFunction
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.color_resolver import ColorResolver
 from gpptx.types.emu import Emu
@@ -32,7 +33,7 @@ class ShapeType(Enum):
 class Shape(CacheDecoratableXmlNode, ABC):
     __slots__ = ('_shape_xml_getter', '_slide_like')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: LazyElementTree, slide_like):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
         super().__init__()
         self._storage = storage
         self._storage_cache_key = cache_key
@@ -84,6 +85,16 @@ class Shape(CacheDecoratableXmlNode, ABC):
     def x(self, v: int) -> Emu:
         return Emu(v)
 
+    @x.setter
+    def x(self, v: Emu) -> None:
+        if self._xfrm_off is None:
+            if self._xfrm is None:
+                self._make_new_xfrm()
+            else:
+                self._make_new_xfrm_off()
+        self._xfrm_off.set('x', str(v))
+        self.save_xml()
+
     @cache_persist_property
     def y(self) -> Optional[Emu]:
         if self._xfrm_off is not None:
@@ -101,6 +112,16 @@ class Shape(CacheDecoratableXmlNode, ABC):
     @y.cache_unserializer
     def y(self, v: int) -> Emu:
         return Emu(v)
+
+    @y.setter
+    def y(self, v: Emu) -> None:
+        if self._xfrm_off is None:
+            if self._xfrm is None:
+                self._make_new_xfrm()
+            else:
+                self._make_new_xfrm_off()
+        self._xfrm_off.set('y', str(v))
+        self.save_xml()
 
     @cache_persist_property
     def width(self) -> Optional[Emu]:
@@ -120,6 +141,16 @@ class Shape(CacheDecoratableXmlNode, ABC):
     def width(self, v: int) -> Emu:
         return Emu(v)
 
+    @width.setter
+    def width(self, v: Emu) -> None:
+        if self._xfrm_ext is None:
+            if self._xfrm is None:
+                self._make_new_xfrm()
+            else:
+                self._make_new_xfrm_ext()
+        self._xfrm_ext.set('cx', str(v))
+        self.save_xml()
+
     @cache_persist_property
     def height(self) -> Optional[Emu]:
         if self._xfrm_ext is not None:
@@ -137,6 +168,16 @@ class Shape(CacheDecoratableXmlNode, ABC):
     @height.cache_unserializer
     def height(self, v: int) -> Emu:
         return Emu(v)
+
+    @height.setter
+    def height(self, v: Emu) -> None:
+        if self._xfrm_ext is None:
+            if self._xfrm is None:
+                self._make_new_xfrm()
+            else:
+                self._make_new_xfrm_ext()
+        self._xfrm_ext.set('cy', str(v))
+        self.save_xml()
 
     @property
     def color_resolver(self) -> ColorResolver:
@@ -162,11 +203,32 @@ class Shape(CacheDecoratableXmlNode, ABC):
             return None
         return first_or_none(self._xfrm.xpath('a:ext[1]', namespaces=pptx_xml_ns))
 
+    def _make_new_xfrm(self):
+        new_xfrm = etree.Element('{%s}xfrm' % pptx_xml_ns['a'])
+        self.xml.append(new_xfrm)
+        update_decorator_cache(self, '_xfrm', new_xfrm, do_change_persisting_cache=False)
+        self._make_new_xfrm_off()
+        self._make_new_xfrm_ext()
+
+    def _make_new_xfrm_off(self):
+        new_xfrm_off = etree.Element('{%s}off' % pptx_xml_ns['a'])
+        new_xfrm_off.set('x', '0')
+        new_xfrm_off.set('y', '0')
+        self._xfrm.append(new_xfrm_off)
+        update_decorator_cache(self, '_xfrm_off', new_xfrm_off, do_change_persisting_cache=False)
+
+    def _make_new_xfrm_ext(self):
+        new_xfrm_ext = etree.Element('{%s}ext' % pptx_xml_ns['a'])
+        new_xfrm_ext.set('cx', '0')
+        new_xfrm_ext.set('cy', '0')
+        self._xfrm.append(new_xfrm_ext)
+        update_decorator_cache(self, '_xfrm_ext', new_xfrm_ext, do_change_persisting_cache=False)
+
 
 class TextShape(Shape):
     __slots__ = ()
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: LazyElementTree, slide_like):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
 
     @property
@@ -176,7 +238,7 @@ class TextShape(Shape):
     @property
     def text_frame(self) -> TextFrame:
         return TextFrame(self._storage, self._storage_cache_key.make_son('text_frame'),
-                         LazyElementTreeByFunction(lambda: self._tx_body), self)
+                         LazyByFunction(lambda: self._tx_body), self)
 
     @cache_local_property
     def _tx_body(self) -> Optional[ElementTree]:
@@ -191,7 +253,7 @@ class PatternType(Enum):
 class PatternShape(Shape):
     __slots__ = ('_pattern_type',)
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: LazyElementTree,
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy,
                  slide_like, pattern_type: PatternType):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
         self._pattern_type = pattern_type
@@ -211,7 +273,7 @@ class PatternShape(Shape):
 class ImageShape(Shape):
     __slots__ = ()
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: LazyElementTree, slide_like):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
 
     @property
@@ -226,7 +288,7 @@ class ImageShape(Shape):
 class GroupShape(Shape):
     __slots__ = ()
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: LazyElementTree, slide_like):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
 
     @property
@@ -237,8 +299,8 @@ class GroupShape(Shape):
     def shapes(self):
         from gpptx.types.shapes_coll import ShapesCollection
 
-        return ShapesCollection(self._storage, self._storage_cache_key.make_son('shapes'), self._shape_xmls,
-                                self._slide_like)
+        return ShapesCollection(self._storage, self._storage_cache_key.make_son('shapes'),
+                                self._shape_xmls, self._shapes_root, self._slide_like)
 
     @cache_persist_property
     def children_offset_x(self) -> Emu:
@@ -278,29 +340,30 @@ class GroupShape(Shape):
             return None
         return first_or_none(self._xfrm.xpath('a:chOff[1]', namespaces=pptx_xml_ns))
 
-    @cache_local_property
-    def _shape_xmls(self) -> LazyElementTreeList:
-        return LazyElementTreeList(self._find_shape_xmls, self._shapes_count,
-                                   invalidate_length_fn=lambda: clear_decorator_cache(self, '_shapes_count'))
+    @help_lazy_list_property
+    def _shape_xmls(self) -> LazyList:
+        def find():
+            els = self.xml.xpath('./*/p:spPr[1]/..', namespaces=pptx_xml_ns)
 
-    @cache_local
-    def _find_shape_xmls(self) -> List[ElementTree]:
-        els = self.xml.xpath('./*/p:spPr[1]/..', namespaces=pptx_xml_ns)
+            els_at_indexes_to_remove = list()
+            for i, el in enumerate(els):
+                if el.tag.endswith('Pr'):
+                    els_at_indexes_to_remove.append(i)
+            delete_shift = 0
+            for i in els_at_indexes_to_remove:
+                els.pop(i - delete_shift)
+                delete_shift += 1
 
-        els_at_indexes_to_remove = list()
-        for i, el in enumerate(els):
-            if el.tag.endswith('Pr'):
-                els_at_indexes_to_remove.append(i)
-        delete_shift = 0
-        for i in els_at_indexes_to_remove:
-            els.pop(i - delete_shift)
-            delete_shift += 1
+            return els
 
-        return els
+        return LazyList(find)
 
-    @cache_persist_property
-    def _shapes_count(self) -> int:
-        return len(self._find_shape_xmls())
+    @help_lazy_property
+    def _shapes_root(self) -> Lazy:
+        def find():
+            return self.xml
+
+        return LazyByFunction(find)
 
 
 class PlaceholderType(Enum):
@@ -326,7 +389,7 @@ class PlaceholderType(Enum):
 class PlaceholderShape(Shape):
     __slots__ = ()
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: LazyElementTree, slide_like):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
 
     @property
@@ -382,7 +445,7 @@ class PlaceholderShape(Shape):
 class UnknownShape(Shape):
     __slots__ = ()
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: LazyElementTree, slide_like):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
 
     @property

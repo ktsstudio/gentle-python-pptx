@@ -1,19 +1,21 @@
 import copy
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class CacheKey:
+    DELIMITER = '@@'
+
     __slots__ = ('name', 'parent', 'root', 'do_disable_cache', 'postfix')
 
     def __init__(self, name: str, parent=None, do_disable_cache: bool = None):
         self.name = name
-        self.parent = parent
-        self.postfix = None
+        self.parent: CacheKey = parent
+        self.postfix: Optional[str] = None
 
         if self.parent is None:
-            self.root = self
+            self.root: CacheKey = self
         else:
-            self.root = self.parent.root
+            self.root: CacheKey = self.parent.root
 
         if do_disable_cache is not None:
             self.do_disable_cache = do_disable_cache
@@ -34,76 +36,154 @@ class CacheKey:
             reversed_path.append(current_key.name)
             current_key = current_key.parent
 
-        return '/'.join(reversed(reversed_path))
+        return self.DELIMITER.join(reversed(reversed_path))
 
     def make_son(self, name: str):
         return CacheKey(name, parent=self)
+
+    @classmethod
+    def from_str(cls, s: str):
+        key = CacheKey('')
+        for part in s.split(cls.DELIMITER):
+            key = key.make_son(part)
+        return key
+
+
+class CachePrefixTreeDict(dict):
+    pass
+
+
+class CachePrefixTree:
+    def __init__(self):
+        self._tree = CachePrefixTreeDict()
+
+    def __getitem__(self, key: CacheKey) -> Tuple[Any, bool]:
+        # reverse linked list using recursion
+        def rec(k: CacheKey):
+            if k.root == k:
+                branch = self._tree  # start
+                parent_exists = True
+            else:
+                branch, parent_exists = rec(k.parent)
+
+            if not parent_exists or branch is None:
+                return None, False  # traverse fail
+
+            if k != key:
+                inner_branch = branch.get(k.name)  # traverse
+                return inner_branch, inner_branch is not None
+            else:
+                value = branch.get(k.name)  # actual value get
+                if value is None:
+                    return value, k in branch
+                else:
+                    return value, True
+
+        return rec(key)
+
+    def __setitem__(self, key: CacheKey, value: Any) -> None:
+        def rec(k: CacheKey):
+            if k.root == k:
+                branch = self._tree
+            else:
+                branch = rec(k.parent)
+
+            if k != key:
+                inner_branch = branch.get(k.name)
+                if inner_branch is None:
+                    inner_branch = CachePrefixTreeDict()
+                    branch[k.name] = inner_branch
+                return inner_branch
+            else:
+                branch[k.name] = value
+
+        rec(key)
+
+    def __delitem__(self, key: CacheKey) -> None:
+        def rec(k: CacheKey):
+            if k.root == k:
+                branch = self._tree
+            else:
+                branch = rec(k.parent)
+
+            if branch is None:
+                return None
+
+            if k != key:
+                inner_branch = branch.get(k.name)
+                return inner_branch
+            else:
+                if k.name in branch:
+                    del branch[k.name]
+
+        rec(key)
+
+    def __contains__(self, key: CacheKey) -> bool:
+        return self[key] is not None
+
+    def to_str_dict(self) -> Dict[str, Any]:
+        result = dict()
+
+        def rec(key: CacheKey, branch: dict):
+            for k, v in branch.items():
+                if isinstance(v, CachePrefixTreeDict):
+                    rec(key.make_son(k), v)
+                else:
+                    result[str(key.make_son(k))] = v
+
+        rec(CacheKey(''), self._tree)
+
+        return result
 
 
 class Cacher:
     _PERSISTING_CACHE_ALLOWED_TYPES = (int, float, str)
 
     def __init__(self):
-        self._persisting_cache: Dict[str, Any] = dict()
-        self._local_cache: Dict[str, Any] = dict()
+        self._persisting_cache = CachePrefixTree()
+        self._local_cache = CachePrefixTree()
         self._is_persisting_cache_changed_since_load = False
 
     def cache_persist(self, key: CacheKey, value: Any, do_change_flag: bool = True) -> None:
         if not self._is_ok_for_persisting_cache(value):
             raise ValueError(f'Value of type {type(value)} is not allowed for persisting cache')
 
-        self._persisting_cache[str(key)] = value
+        self._persisting_cache[key] = value
 
         if do_change_flag:
             self._is_persisting_cache_changed_since_load = True
 
     def cache_local(self, key: CacheKey, value: Any) -> None:
-        self._local_cache[str(key)] = value
+        self._local_cache[key] = value
 
     def delete_from_persisting_cache(self, key: CacheKey) -> None:
-        key_str = str(key)
-
-        keys_to_delete: List[str] = list()
-        for k in self._persisting_cache.keys():
-            if k.startswith(key_str):
-                keys_to_delete.append(k)
-
-        for k in keys_to_delete:
-            del self._persisting_cache[k]
+        del self._persisting_cache[key]
 
     def delete_from_local_cache(self, key: CacheKey) -> None:
-        key_str = str(key)
-
-        keys_to_delete: List[str] = list()
-        for k in self._local_cache.keys():
-            if k.startswith(key_str):
-                keys_to_delete.append(k)
-
-        for k in keys_to_delete:
-            del self._local_cache[k]
+        del self._local_cache[key]
 
     def delete_from_any_cache(self, key: CacheKey) -> None:
         self.delete_from_persisting_cache(key)
         self.delete_from_local_cache(key)
 
-    def get_from_persisting_cache(self, key: CacheKey) -> Optional[Any]:
-        return self._persisting_cache.get(str(key))
+    def get_from_persisting_cache(self, key: CacheKey) -> Tuple[Optional[Any], bool]:
+        return self._persisting_cache[key]
 
-    def get_from_local_cache(self, key: CacheKey) -> Optional[Any]:
-        return self._local_cache.get(str(key))
+    def get_from_local_cache(self, key: CacheKey) -> Tuple[Optional[Any], bool]:
+        return self._local_cache[key]
 
     def have_in_persisting_cache(self, key: CacheKey) -> Optional[Any]:
-        return str(key) in self._persisting_cache
+        return key in self._persisting_cache
 
     def have_in_local_cache(self, key: CacheKey) -> Optional[Any]:
-        return str(key) in self._local_cache
+        return key in self._local_cache
 
     def load_persisting_cache(self, cache: Dict[str, Any]) -> None:
         for k, v in cache.items():
-            self.cache_persist(k, v, do_change_flag=False)
+            self.cache_persist(CacheKey.from_str(k), v, do_change_flag=False)
 
     def dump_persisting_cache(self) -> Dict[str, Any]:
-        return self._persisting_cache
+        return self._persisting_cache.to_str_dict()
 
     def duplicate(self):
         new_cacher = Cacher()
