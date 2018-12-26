@@ -3,8 +3,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 class CacheKey:
-    DELIMITER = '@@'
-
     __slots__ = ('name', 'parent', 'root', 'do_disable_cache', 'postfix')
 
     def __init__(self, name: str, parent=None, do_disable_cache: bool = None):
@@ -36,17 +34,17 @@ class CacheKey:
             reversed_path.append(current_key.name)
             current_key = current_key.parent
 
-        return self.DELIMITER.join(reversed(reversed_path))
+        return '/'.join(reversed(reversed_path))
+
+    @property
+    def this_or_son_from_postfix(self):
+        if self.postfix is None:
+            return self
+        else:
+            return self.make_son(self.postfix)
 
     def make_son(self, name: str):
         return CacheKey(name, parent=self)
-
-    @classmethod
-    def from_str(cls, s: str):
-        key = CacheKey('')
-        for part in s.split(cls.DELIMITER):
-            key = key.make_son(part)
-        return key
 
 
 class CachePrefixTreeDict(dict):
@@ -79,7 +77,7 @@ class CachePrefixTree:
                 else:
                     return value, True
 
-        return rec(key)
+        return rec(key.this_or_son_from_postfix)
 
     def __setitem__(self, key: CacheKey, value: Any) -> None:
         def rec(k: CacheKey):
@@ -97,7 +95,7 @@ class CachePrefixTree:
             else:
                 branch[k.name] = value
 
-        rec(key)
+        rec(key.this_or_son_from_postfix)
 
     def __delitem__(self, key: CacheKey) -> None:
         def rec(k: CacheKey):
@@ -116,24 +114,16 @@ class CachePrefixTree:
                 if k.name in branch:
                     del branch[k.name]
 
-        rec(key)
+        rec(key.this_or_son_from_postfix)
 
     def __contains__(self, key: CacheKey) -> bool:
         return self[key] is not None
 
-    def to_str_dict(self) -> Dict[str, Any]:
-        result = dict()
+    def get_inner_tree(self) -> Dict[str, Any]:
+        return self._tree
 
-        def rec(key: CacheKey, branch: dict):
-            for k, v in branch.items():
-                if isinstance(v, CachePrefixTreeDict):
-                    rec(key.make_son(k), v)
-                else:
-                    result[str(key.make_son(k))] = v
-
-        rec(CacheKey(''), self._tree)
-
-        return result
+    def set_inner_tree(self, tree: Dict[str, Any]) -> None:
+        self._tree = tree
 
 
 class Cacher:
@@ -144,14 +134,12 @@ class Cacher:
         self._local_cache = CachePrefixTree()
         self._is_persisting_cache_changed_since_load = False
 
-    def cache_persist(self, key: CacheKey, value: Any, do_change_flag: bool = True) -> None:
+    def cache_persist(self, key: CacheKey, value: Any) -> None:
         if not self._is_ok_for_persisting_cache(value):
             raise ValueError(f'Value of type {type(value)} is not allowed for persisting cache')
 
         self._persisting_cache[key] = value
-
-        if do_change_flag:
-            self._is_persisting_cache_changed_since_load = True
+        self._is_persisting_cache_changed_since_load = True
 
     def cache_local(self, key: CacheKey, value: Any) -> None:
         self._local_cache[key] = value
@@ -179,11 +167,10 @@ class Cacher:
         return key in self._local_cache
 
     def load_persisting_cache(self, cache: Dict[str, Any]) -> None:
-        for k, v in cache.items():
-            self.cache_persist(CacheKey.from_str(k), v, do_change_flag=False)
+        self._persisting_cache.set_inner_tree(cache)
 
     def dump_persisting_cache(self) -> Dict[str, Any]:
-        return self._persisting_cache.to_str_dict()
+        return self._persisting_cache.get_inner_tree()
 
     def duplicate(self):
         new_cacher = Cacher()
