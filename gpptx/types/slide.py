@@ -11,6 +11,7 @@ from gpptx.storage.cache.cacher import CacheKey
 from gpptx.storage.cache.decorator import cache_persist_property, help_lazy_list_property, help_lazy_property
 from gpptx.storage.cache.lazy import LazyList, Lazy, LazyByFunction
 from gpptx.storage.storage import PresentationStorage
+from gpptx.types.emu import Emu
 from gpptx.types.shapes_coll import ShapesCollection
 from gpptx.types.theme import Theme
 from gpptx.types.xml_node import CacheDecoratableXmlNode
@@ -18,12 +19,17 @@ from gpptx.util.list import first_or_none
 
 
 class SlideLike(CacheDecoratableXmlNode, ABC):
-    __slots__ = ()
+    __slots__ = ('_presentation',)
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, presentation):
         super().__init__()
         self._storage = storage
         self._storage_cache_key = cache_key
+        self._presentation = presentation
+
+    @property
+    def presentation(self):
+        return self._presentation
 
     @property
     def shapes(self) -> ShapesCollection:
@@ -33,6 +39,14 @@ class SlideLike(CacheDecoratableXmlNode, ABC):
     @property
     def theme(self) -> Theme:
         raise NotImplementedError
+
+    @property
+    def width(self) -> Emu:
+        return self._presentation.slide_width
+
+    @property
+    def height(self) -> Emu:
+        return self._presentation.slide_height
 
     @help_lazy_list_property
     def _shape_xmls(self) -> LazyList:
@@ -63,8 +77,8 @@ class SlideLike(CacheDecoratableXmlNode, ABC):
 class SlideMaster(SlideLike):
     __slots__ = ('_xml_path',)
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, xml_path: str):
-        super().__init__(storage, cache_key)
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, presentation, xml_path: str):
+        super().__init__(storage, cache_key, presentation)
         self._storage = storage
         self._storage_cache_key = cache_key
         self._xml_path = xml_path
@@ -92,8 +106,8 @@ class SlideMaster(SlideLike):
 class SlideLayout(SlideLike):
     __slots__ = ('_xml_path',)
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, xml_path: str):
-        super().__init__(storage, cache_key)
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, presentation, xml_path: str):
+        super().__init__(storage, cache_key, presentation)
         self._storage = storage
         self._storage_cache_key = cache_key
         self._xml_path = xml_path
@@ -109,6 +123,7 @@ class SlideLayout(SlideLike):
     def slide_master(self) -> SlideMaster:
         return SlideMaster(self._storage,
                            self._storage_cache_key.root.make_son('slide_master').make_son(self._slide_master_path),
+                           self._presentation,
                            self._slide_master_path)
 
     @property
@@ -124,8 +139,8 @@ class SlideLayout(SlideLike):
 class Slide(SlideLike):
     __slots__ = ('_xml_path',)
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, xml_path: str):
-        super().__init__(storage, cache_key)
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, presentation, xml_path: str):
+        super().__init__(storage, cache_key, presentation)
         self._storage = storage
         self._storage_cache_key = cache_key
         self._xml_path = xml_path
@@ -141,6 +156,7 @@ class Slide(SlideLike):
     def slide_layout(self) -> SlideLayout:
         return SlideLayout(self._storage,
                            self._storage_cache_key.root.make_son('slide_layout').make_son(self._slide_layout_path),
+                           self._presentation,
                            self._slide_layout_path)
 
     @property

@@ -10,19 +10,22 @@ from gpptx.util.annotations import dangerous_method
 
 
 class SlidesCollection(CacheDecoratable):
-    __slots__ = ('_slide_paths',)
+    __slots__ = ('_presentation', '_slide_paths')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, slide_paths: List[str]):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, presentation, slide_paths: List[str]):
+        from gpptx.types.presentation import Presentation
+
         self._storage = storage
         self._storage_cache_key = cache_key
+        self._presentation: Presentation = presentation
         self._slide_paths = slide_paths
 
     def __getitem__(self, index: int) -> Slide:
-        return Slide(self._storage, self._storage_cache_key.make_son(str(index)), self._slide_paths[index])
+        return Slide(self._storage, self._storage_cache_key.make_son(str(index)), self._presentation, self._slide_paths[index])
 
     def __iter__(self) -> Iterator[Slide]:
         for i, path in enumerate(self._slide_paths):
-            yield Slide(self._storage, self._storage_cache_key.make_son(str(i)), path)
+            yield Slide(self._storage, self._storage_cache_key.make_son(str(i)), self._presentation, path)
 
     def __len__(self):
         return len(self._slide_paths)
