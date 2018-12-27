@@ -137,6 +137,7 @@ class LazyList:
         if self._length is None:
             self._ensure_buffer()
             self._length = len(self._buffer)
+            self._notify_new_length()
 
     def _notify_new_buffer(self):
         if self._notify_new_buffer_fn:
