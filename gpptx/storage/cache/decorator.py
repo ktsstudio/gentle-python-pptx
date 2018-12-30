@@ -10,6 +10,10 @@ from gpptx.storage.storage import PresentationStorage
 class CacheDecoratable(ABC):
     __slots__ = ('_storage', '_storage_cache_key')
 
+    def __init__(self, storage: PresentationStorage, storage_cache_key: CacheKey):
+        self._storage = storage
+        self._storage_cache_key = storage_cache_key
+
 
 def cache_persist(f: Callable) -> Callable:
     return _CacheDecoratorMethod(f, do_use_persisting_cache=True)

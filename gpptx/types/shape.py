@@ -1,6 +1,7 @@
 from abc import ABC
 from enum import Enum
-from typing import Optional
+from operator import xor
+from typing import Optional, Callable
 
 from lxml import etree
 from lxml.etree import ElementTree
@@ -12,31 +13,34 @@ from gpptx.storage.cache.decorator import cache_persist_property, cache_local_pr
 from gpptx.storage.cache.lazy import Lazy, LazyList, LazyByFunction
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.color_maker import ColorMaker
-from gpptx.types.emu import Emu
-from gpptx.types.fill import Fill
-from gpptx.types.image import Image
+from gpptx.types.fill import Fill, SolidFill, GradientFill
+from gpptx.types.image import Image, SolidPatternImage, GradientPatternImage, PlaceholderImage
 from gpptx.types.text import TextFrame
+from gpptx.types.units import Emu
 from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.list import first_or_none
 
 
 class ShapeType(Enum):
     TEXT = 1
-    PATTERN_SOLID = 2
-    PATTERN_GRADIENT = 3
-    IMAGE = 4
+    DUAL_IMAGE_AND_PATTERN_SOLID = 2
+    DUAL_IMAGE_AND_PATTERN_GRADIENT = 3
+    RASTER_IMAGE = 4
     GROUP = 5
     PLACEHOLDER = 6
     UNKNOWN = 7
+    VECTOR_IMAGE = 8
+    DUAL_TEXT_AND_PLACEHOLDER = 9
+    DUAL_IMAGE_AND_PLACEHOLDER = 10
+    DUAL_TEXT_AND_IMAGE_AND_PATTERN_SOLID = 11
+    DUAL_TEXT_AND_IMAGE_AND_PATTERN_GRADIENT = 12
 
 
 class Shape(CacheDecoratableXmlNode, ABC):
     __slots__ = ('_shape_xml_getter', '_slide_like')
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
-        super().__init__()
-        self._storage = storage
-        self._storage_cache_key = cache_key
+        super().__init__(storage, cache_key)
         self._shape_xml_getter = shape_xml_getter
         self._slide_like = slide_like
 
@@ -50,10 +54,6 @@ class Shape(CacheDecoratableXmlNode, ABC):
     @property
     def slide(self):
         return self._slide_like
-
-    @property
-    def shape_type(self) -> ShapeType:
-        raise NotImplementedError
 
     @cache_persist_property
     def shape_id(self) -> int:
@@ -72,7 +72,7 @@ class Shape(CacheDecoratableXmlNode, ABC):
         if self._xfrm_off is not None:
             x_str = self._xfrm_off.get('x')
             if x_str is not None:
-                return Emu(int(x_str))
+                return Emu(x_str)
         if self.do_use_defaults_when_null:
             return Emu(0)
         return None
@@ -102,7 +102,7 @@ class Shape(CacheDecoratableXmlNode, ABC):
         if self._xfrm_off is not None:
             y_str = self._xfrm_off.get('y')
             if y_str is not None:
-                return Emu(int(y_str))
+                return Emu(y_str)
         if self.do_use_defaults_when_null:
             return Emu(0)
         return None
@@ -132,7 +132,7 @@ class Shape(CacheDecoratableXmlNode, ABC):
         if self._xfrm_ext is not None:
             cx_str = self._xfrm_ext.get('cx')
             if cx_str is not None:
-                return Emu(int(cx_str))
+                return Emu(cx_str)
         if self.do_use_defaults_when_null:
             return Emu(0)
         return None
@@ -162,7 +162,7 @@ class Shape(CacheDecoratableXmlNode, ABC):
         if self._xfrm_ext is not None:
             cy_str = self._xfrm_ext.get('cy')
             if cy_str is not None:
-                return Emu(int(cy_str))
+                return Emu(cy_str)
         if self.do_use_defaults_when_null:
             return Emu(0)
         return None
@@ -251,10 +251,6 @@ class TextShape(Shape):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
 
     @property
-    def shape_type(self) -> ShapeType:
-        return ShapeType.TEXT
-
-    @property
     def text_frame(self) -> TextFrame:
         return TextFrame(self._storage, self._storage_cache_key.make_son('text_frame'),
                          LazyByFunction(lambda: self._tx_body), self)
@@ -272,36 +268,34 @@ class PatternType(Enum):
 class PatternShape(Shape):
     __slots__ = ('_pattern_type',)
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy,
-                 slide_like, pattern_type: PatternType):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like,
+                 pattern_type: PatternType):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
         self._pattern_type = pattern_type
 
     @property
-    def shape_type(self):
-        if self._pattern_type == PatternType.SOLID:
-            return ShapeType.PATTERN_SOLID
-        elif self._pattern_type == PatternType.GRADIENT:
-            return ShapeType.PATTERN_GRADIENT
-
-    @property
     def fill(self) -> Fill:
-        raise NotImplementedError  # TODO
+        if self._pattern_type == PatternType.SOLID:
+            return SolidFill(self)
+        elif self._pattern_type == PatternType.GRADIENT:
+            return GradientFill(self)
 
 
 class ImageShape(Shape):
-    __slots__ = ()
+    __slots__ = ('_image',)
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like,
+                 image: Optional[Image] = None, image_maker: Callable[[Shape], Image] = None):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
-
-    @property
-    def shape_type(self) -> ShapeType:
-        return ShapeType.IMAGE
+        assert xor(image is None, image_maker is None)
+        if image is not None:
+            self._image = image
+        elif image_maker is not None:
+            self._image = image_maker(self)
 
     @property
     def image(self) -> Image:
-        raise NotImplementedError  # TODO
+        return self._image
 
 
 class GroupShape(Shape):
@@ -309,10 +303,6 @@ class GroupShape(Shape):
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
-
-    @property
-    def shape_type(self) -> ShapeType:
-        return ShapeType.GROUP
 
     @property
     def shapes(self):
@@ -326,7 +316,7 @@ class GroupShape(Shape):
         if self._xfrm_ch_off is not None:
             x_str = self._xfrm_ch_off.get('x')
             if x_str is not None:
-                return Emu(int(x_str))
+                return Emu(x_str)
         return Emu(0)
 
     @children_offset_x.cache_serializer
@@ -342,7 +332,7 @@ class GroupShape(Shape):
         if self._xfrm_ch_off is not None:
             y_str = self._xfrm_ch_off.get('y')
             if y_str is not None:
-                return Emu(int(y_str))
+                return Emu(y_str)
         return Emu(0)
 
     @children_offset_y.cache_serializer
@@ -411,10 +401,6 @@ class PlaceholderShape(Shape):
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
 
-    @property
-    def shape_type(self) -> ShapeType:
-        return ShapeType.PLACEHOLDER
-
     @cache_persist_property
     def placeholder_type(self) -> PlaceholderType:
         type_ = self.xml.get('type')
@@ -467,6 +453,89 @@ class UnknownShape(Shape):
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
 
+
+class ShapeDual(Shape, ABC):
+    __slots__ = ()
+
+
+class TextAndPlaceholderShapeDual(ShapeDual):
+    __slots__ = ()
+
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
+        super().__init__(storage, cache_key, shape_xml_getter, slide_like)
+
     @property
-    def shape_type(self) -> ShapeType:
-        return ShapeType.UNKNOWN
+    def as_text(self) -> TextShape:
+        return TextShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like)
+
+    @property
+    def as_placeholder(self) -> PlaceholderShape:
+        return PlaceholderShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like)
+
+
+class ImageAndPlaceholderShapeDual(ShapeDual):
+    __slots__ = ()
+
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
+        super().__init__(storage, cache_key, shape_xml_getter, slide_like)
+
+    @property
+    def as_image(self) -> ImageShape:
+        return ImageShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like,
+                          image=PlaceholderImage(self))
+
+    @property
+    def as_placeholder(self) -> PlaceholderShape:
+        return PlaceholderShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like)
+
+
+class ImageAndPatternShapeDual(ShapeDual):
+    __slots__ = ('_pattern_type',)
+
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like,
+                 pattern_type: PatternType):
+        super().__init__(storage, cache_key, shape_xml_getter, slide_like)
+        self._pattern_type = pattern_type
+
+    @property
+    def as_image(self) -> ImageShape:
+        if self._pattern_type == PatternType.SOLID:
+            image = SolidPatternImage(self.as_pattern)
+        elif self._pattern_type == PatternType.GRADIENT:
+            image = GradientPatternImage(self.as_pattern)
+        else:
+            raise ValueError
+        return ImageShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like, image=image)
+
+    @property
+    def as_pattern(self) -> PatternShape:
+        return PatternShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like,
+                            self._pattern_type)
+
+
+class TextAndImageAndPatternShapeDual(ShapeDual):
+    __slots__ = ('_pattern_type',)
+
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like,
+                 pattern_type: PatternType):
+        super().__init__(storage, cache_key, shape_xml_getter, slide_like)
+        self._pattern_type = pattern_type
+
+    @property
+    def as_text(self) -> TextShape:
+        return TextShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like)
+
+    @property
+    def as_image(self) -> ImageShape:
+        if self._pattern_type == PatternType.SOLID:
+            image = SolidPatternImage(self.as_pattern)
+        elif self._pattern_type == PatternType.GRADIENT:
+            image = GradientPatternImage(self.as_pattern)
+        else:
+            raise ValueError
+        return ImageShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like, image=image)
+
+    @property
+    def as_pattern(self) -> PatternShape:
+        return PatternShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like,
+                            self._pattern_type)

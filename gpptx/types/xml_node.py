@@ -4,7 +4,9 @@ from contextlib import contextmanager
 from lxml import etree
 from lxml.etree import ElementTree
 
+from gpptx.storage.cache.cacher import CacheKey
 from gpptx.storage.cache.decorator import CacheDecoratable
+from gpptx.storage.storage import PresentationStorage
 
 
 class BaseXmlNode(ABC):
@@ -70,7 +72,8 @@ class XmlNode(BaseXmlNode, ABC):
 class CacheDecoratableXmlNode(BaseXmlNode, CacheDecoratable, ABC):
     __slots__ = ('_do_use_defaults_when_null',)
 
-    def __init__(self):
+    def __init__(self, storage: PresentationStorage, storage_cache_key: CacheKey):
+        super().__init__(storage, storage_cache_key)
         self._do_use_defaults_when_null = True
 
     @property

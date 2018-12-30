@@ -9,8 +9,10 @@ from gpptx.storage.cache.decorator import cache_local, CacheDecoratable, cache_p
     clear_decorator_cache, update_decorator_cache
 from gpptx.storage.cache.lazy import LazyList, Lazy
 from gpptx.storage.storage import PresentationStorage
-from gpptx.types.shape import Shape, GroupShape, ShapeType, TextShape, PatternShape, PatternType, ImageShape, \
-    PlaceholderShape, UnknownShape
+from gpptx.types.image import RasterImage, VectorImage
+from gpptx.types.shape import Shape, GroupShape, ShapeType, TextShape, PatternType, ImageShape, \
+    PlaceholderShape, UnknownShape, PlaceholderType, ImageAndPatternShapeDual, \
+    TextAndPlaceholderShapeDual, ImageAndPlaceholderShapeDual, TextAndImageAndPatternShapeDual
 from gpptx.util.annotations import dangerous_method
 
 
@@ -193,20 +195,36 @@ class ShapesCollection(CacheDecoratable):
             return ShapeType.IMAGE
 
         has_tx_body = len(shape_xml.xpath('p:txBody[1]', namespaces=pptx_xml_ns)) == 1
-        if has_tx_body:
-            return ShapeType.TEXT
-
         has_solid_fill = len(shape_xml.xpath('p:spPr[1]/a:solidFill[1]', namespaces=pptx_xml_ns)) == 1
-        if has_solid_fill:
-            return ShapeType.PATTERN_SOLID
-
         has_grad_fill = len(shape_xml.xpath('p:spPr[1]/a:gradFill[1]', namespaces=pptx_xml_ns)) == 1
-        if has_grad_fill:
-            return ShapeType.PATTERN_GRADIENT
-
         has_placeholder = len(shape_xml.xpath('p:nvSpPr[1]/p:nvPr[1]/p:ph[1]', namespaces=pptx_xml_ns)) == 1
+
+        if has_tx_body and has_solid_fill:
+            return ShapeType.DUAL_IMAGE_AND_PATTERN_SOLID
+
+        if has_tx_body and has_grad_fill:
+            return ShapeType.DUAL_TEXT_AND_IMAGE_AND_PATTERN_GRADIENT
+
+        if has_solid_fill:
+            return ShapeType.DUAL_IMAGE_AND_PATTERN_SOLID
+
+        if has_grad_fill:
+            return ShapeType.DUAL_IMAGE_AND_PATTERN_GRADIENT
+
+        if has_placeholder:
+            # noinspection PyUnresolvedReferences
+            placeholder_type = self._make_shape(ShapeType.PLACEHOLDER, shape_index).placeholder_type
+            if placeholder_type == PlaceholderType.PICTURE:
+                return ShapeType.DUAL_IMAGE_AND_PLACEHOLDER
+
+        if has_tx_body and has_placeholder:
+            return ShapeType.DUAL_TEXT_AND_PLACEHOLDER
+
         if has_placeholder:
             return ShapeType.PLACEHOLDER
+
+        if has_tx_body:
+            return ShapeType.TEXT
 
         return ShapeType.UNKNOWN
 
@@ -224,15 +242,25 @@ class ShapesCollection(CacheDecoratable):
 
         if shape_type == ShapeType.TEXT:
             return TextShape(self._storage, cache_key, shape_xml_getter, self._slide)
-        if shape_type == ShapeType.PATTERN_SOLID:
-            return PatternShape(self._storage, cache_key, shape_xml_getter, self._slide, PatternType.SOLID)
-        if shape_type == ShapeType.PATTERN_GRADIENT:
-            return PatternShape(self._storage, cache_key, shape_xml_getter, self._slide, PatternType.GRADIENT)
-        if shape_type == ShapeType.IMAGE:
-            return ImageShape(self._storage, cache_key, shape_xml_getter, self._slide)
-        if shape_type == ShapeType.GROUP:
+        elif shape_type == ShapeType.DUAL_IMAGE_AND_PATTERN_SOLID:
+            return ImageAndPatternShapeDual(self._storage, cache_key, shape_xml_getter, self._slide, PatternType.SOLID)
+        elif shape_type == ShapeType.DUAL_IMAGE_AND_PATTERN_GRADIENT:
+            return ImageAndPatternShapeDual(self._storage, cache_key, shape_xml_getter, self._slide, PatternType.GRADIENT)
+        elif shape_type == ShapeType.RASTER_IMAGE:
+            return ImageShape(self._storage, cache_key, shape_xml_getter, self._slide, image_maker=RasterImage)
+        elif shape_type == ShapeType.GROUP:
             return GroupShape(self._storage, cache_key, shape_xml_getter, self._slide)
-        if shape_type == ShapeType.PLACEHOLDER:
+        elif shape_type == ShapeType.PLACEHOLDER:
             return PlaceholderShape(self._storage, cache_key, shape_xml_getter, self._slide)
-        if shape_type == ShapeType.UNKNOWN:
+        elif shape_type == ShapeType.UNKNOWN:
             return UnknownShape(self._storage, cache_key, shape_xml_getter, self._slide)
+        elif shape_type == ShapeType.VECTOR_IMAGE:
+            return ImageShape(self._storage, cache_key, shape_xml_getter, self._slide, image_maker=VectorImage)
+        elif shape_type == ShapeType.DUAL_TEXT_AND_PLACEHOLDER:
+            return TextAndPlaceholderShapeDual(self._storage, cache_key, shape_xml_getter, self._slide)
+        elif shape_type == ShapeType.DUAL_IMAGE_AND_PLACEHOLDER:
+            return ImageAndPlaceholderShapeDual(self._storage, cache_key, shape_xml_getter, self._slide)
+        elif shape_type == ShapeType.DUAL_TEXT_AND_IMAGE_AND_PATTERN_GRADIENT:
+            return TextAndImageAndPatternShapeDual(self._storage, cache_key, shape_xml_getter, self._slide, PatternType.GRADIENT)
+        elif shape_type == ShapeType.DUAL_TEXT_AND_IMAGE_AND_PATTERN_SOLID:
+            return TextAndImageAndPatternShapeDual(self._storage, cache_key, shape_xml_getter, self._slide, PatternType.SOLID)

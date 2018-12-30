@@ -11,7 +11,7 @@ from gpptx.storage.cache.decorator import cache_local, CacheDecoratable, cache_p
 from gpptx.storage.cache.lazy import LazyList, Lazy
 from gpptx.storage.storage import PresentationStorage
 from gpptx.types.color import Color, CustomSetColor
-from gpptx.types.emu import Emu
+from gpptx.types.units import Emu
 from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.annotations import dangerous_method
 from gpptx.util.list import first_or_none
@@ -36,9 +36,7 @@ class Run(CacheDecoratableXmlNode):
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, run_xml_getter: Lazy,
                  paragraph):
-        super().__init__()
-        self._storage = storage
-        self._storage_cache_key = cache_key
+        super().__init__(storage, cache_key)
         self._run_xml_getter = run_xml_getter
         self._paragraph: Paragraph = paragraph
 
@@ -236,9 +234,7 @@ class Paragraph(CacheDecoratableXmlNode):
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey,
                  paragraph_xml_getter: Lazy, text_frame):
-        super().__init__()
-        self._storage = storage
-        self._storage_cache_key = cache_key
+        super().__init__(storage, cache_key)
         self._paragraph_xml_getter = paragraph_xml_getter
         self._text_frame: TextFrame = text_frame
 
@@ -330,7 +326,7 @@ class Paragraph(CacheDecoratableXmlNode):
         if self._p_pr is not None:
             level_width_str = self._p_pr.get('defTabSz')
             if level_width_str is not None:
-                return Emu(int(level_width_str))
+                return Emu(level_width_str)
         if self.do_use_defaults_when_null:
             return Emu.from_px(32)
         return None
@@ -477,9 +473,7 @@ class TextFrame(CacheDecoratableXmlNode):
                  shape):
         from gpptx.types.shape import Shape
 
-        super().__init__()
-        self._storage = storage
-        self._storage_cache_key = cache_key
+        super().__init__(storage, cache_key)
         self._tx_body_xml_getter = tx_body_xml_getter
         self._shape: Shape = shape
 
@@ -508,7 +502,7 @@ class TextFrame(CacheDecoratableXmlNode):
         if self._body_pr is not None:
             l_ins_str = self._body_pr.get('lIns')
             if l_ins_str is not None:
-                return Emu(int(l_ins_str))
+                return Emu(l_ins_str)
         if self.do_use_defaults_when_null:
             return Emu(0)
         return None
@@ -526,7 +520,7 @@ class TextFrame(CacheDecoratableXmlNode):
         if self._body_pr is not None:
             t_ins_str = self._body_pr.get('tIns')
             if t_ins_str is not None:
-                return Emu(int(t_ins_str))
+                return Emu(t_ins_str)
         if self.do_use_defaults_when_null:
             return Emu(0)
         return None
@@ -544,7 +538,7 @@ class TextFrame(CacheDecoratableXmlNode):
         if self._body_pr is not None:
             r_ins_str = self._body_pr.get('rIns')
             if r_ins_str is not None:
-                return Emu(int(r_ins_str))
+                return Emu(r_ins_str)
         if self.do_use_defaults_when_null:
             return Emu(0)
         return None
@@ -562,7 +556,7 @@ class TextFrame(CacheDecoratableXmlNode):
         if self._body_pr is not None:
             b_ins_str = self._body_pr.get('bIns')
             if b_ins_str is not None:
-                return Emu(int(b_ins_str))
+                return Emu(b_ins_str)
         if self.do_use_defaults_when_null:
             return Emu(0)
         return None

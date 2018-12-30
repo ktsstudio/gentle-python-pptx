@@ -16,9 +16,7 @@ class Theme(CacheDecoratableXmlNode):
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, xml_path: str, slide_master):
         from gpptx.types.slide import SlideMaster
 
-        super().__init__()
-        self._storage = storage
-        self._storage_cache_key = cache_key
+        super().__init__(storage, cache_key)
         self._xml_path = xml_path
         self._slide_master: SlideMaster = slide_master
 

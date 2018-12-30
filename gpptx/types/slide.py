@@ -11,9 +11,9 @@ from gpptx.storage.cache.cacher import CacheKey
 from gpptx.storage.cache.decorator import cache_persist_property, help_lazy_list_property, help_lazy_property
 from gpptx.storage.cache.lazy import LazyList, Lazy, LazyByFunction
 from gpptx.storage.storage import PresentationStorage
-from gpptx.types.emu import Emu
 from gpptx.types.shapes_coll import ShapesCollection
 from gpptx.types.theme import Theme
+from gpptx.types.units import Emu
 from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.list import first_or_none
 
@@ -22,9 +22,7 @@ class SlideLike(CacheDecoratableXmlNode, ABC):
     __slots__ = ('_presentation',)
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, presentation):
-        super().__init__()
-        self._storage = storage
-        self._storage_cache_key = cache_key
+        super().__init__(storage, cache_key)
         self._presentation = presentation
 
     @property
@@ -35,6 +33,10 @@ class SlideLike(CacheDecoratableXmlNode, ABC):
     def shapes(self) -> ShapesCollection:
         return ShapesCollection(self._storage, self._storage_cache_key.make_son('shapes'),
                                 self._shape_xmls, self.shapes_root_getter, self)
+
+    @property
+    def rels(self) -> ElementTree:
+        raise NotImplementedError
 
     @property
     def theme(self) -> Theme:
@@ -91,6 +93,10 @@ class SlideMaster(SlideLike):
         return self._storage.loader.save_file_xml(self._xml_path, self.xml)
 
     @property
+    def rels(self) -> ElementTree:
+        return self._storage.loader.get_file_xml(make_rels_path(self._xml_path))
+
+    @property
     def theme(self) -> Theme:
         return Theme(self._storage,
                      self._storage_cache_key.make_son('theme').make_son(self._theme_path),
@@ -118,6 +124,10 @@ class SlideLayout(SlideLike):
 
     def save_xml(self) -> None:
         return self._storage.loader.save_file_xml(self._xml_path, self.xml)
+
+    @property
+    def rels(self) -> ElementTree:
+        return self._storage.loader.get_file_xml(make_rels_path(self._xml_path))
 
     @property
     def slide_master(self) -> SlideMaster:
@@ -151,6 +161,10 @@ class Slide(SlideLike):
 
     def save_xml(self) -> None:
         return self._storage.loader.save_file_xml(self._xml_path, self.xml)
+
+    @property
+    def rels(self) -> ElementTree:
+        return self._storage.loader.get_file_xml(make_rels_path(self._xml_path))
 
     @property
     def slide_layout(self) -> SlideLayout:

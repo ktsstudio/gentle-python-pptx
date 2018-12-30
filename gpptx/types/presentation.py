@@ -8,8 +8,8 @@ from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.cacher import CacheKey
 from gpptx.storage.cache.decorator import cache_persist_property, cache_local_property
 from gpptx.storage.storage import PresentationStorage
-from gpptx.types.emu import Emu
 from gpptx.types.slides_coll import SlidesCollection
+from gpptx.types.units import Emu
 from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.list import first_or_none
 
@@ -20,9 +20,7 @@ class Presentation(CacheDecoratableXmlNode):
     __slots__ = ()
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey):
-        super().__init__()
-        self._storage = storage
-        self._storage_cache_key = cache_key
+        super().__init__(storage, cache_key)
 
     @property
     def xml(self) -> ElementTree:
@@ -38,7 +36,7 @@ class Presentation(CacheDecoratableXmlNode):
     @cache_persist_property
     def slide_width(self) -> Optional[Emu]:
         if self._sld_sz is not None:
-            return Emu(int(self._sld_sz.get('cx')))
+            return Emu(self._sld_sz.get('cx'))
         if self._do_use_defaults_when_null:
             return Emu(0)
         return None
@@ -54,7 +52,7 @@ class Presentation(CacheDecoratableXmlNode):
     @cache_persist_property
     def slide_height(self) -> Optional[Emu]:
         if self._sld_sz is not None:
-            return Emu(int(self._sld_sz.get('cy')))
+            return Emu(self._sld_sz.get('cy'))
         if self._do_use_defaults_when_null:
             return Emu(0)
         return None

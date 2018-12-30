@@ -1,3 +1,7 @@
+import math
+from typing import Union
+
+
 class Emu(int):
     _EMUS_PER_CENTIPOINT = 127
     _EMUS_PER_INCH = 914400
@@ -6,7 +10,9 @@ class Emu(int):
     _EMUS_PER_PT = 12700
     _PT_PER_PX = 12 / 16
 
-    def __new__(cls, emu):
+    def __new__(cls, emu: Union[int, float, str]):
+        if isinstance(emu, str):
+            emu = int(emu)
         # noinspection PyArgumentList
         # because of Pycharm internal error
         return int.__new__(cls, emu)
@@ -62,3 +68,36 @@ class Emu(int):
     @classmethod
     def from_px(cls, px: float):
         return cls(px * cls._PT_PER_PX * cls._EMUS_PER_PT)
+
+
+class Angle(int):
+    _ANGLE_POINTS = 60000
+
+    def __new__(cls, angle_points: Union[int, float, str]):
+        if isinstance(angle_points, str):
+            angle_points = int(angle_points)
+        # noinspection PyArgumentList
+        # because of Pycharm internal error
+        return int.__new__(cls, angle_points)
+
+    @property
+    def degrees(self) -> float:
+        return self / self._ANGLE_POINTS
+
+    @property
+    def radians(self) -> float:
+        return math.radians(self.degrees)
+
+    @classmethod
+    def from_degrees(cls, degrees: float):
+        return cls(degrees * cls._ANGLE_POINTS)
+
+    @classmethod
+    def from_radians(cls, radians: float):
+        return cls.from_degrees(math.degrees(radians))
+
+    def rotate_clock_direction(self):
+        if self == 0:
+            return self
+        else:
+            return Angle((360 * self._ANGLE_POINTS) - self)
