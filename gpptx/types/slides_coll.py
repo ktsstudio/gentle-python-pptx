@@ -15,8 +15,7 @@ class SlidesCollection(CacheDecoratable):
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, presentation, slide_paths: List[str]):
         from gpptx.types.presentation import Presentation
 
-        self._storage = storage
-        self._storage_cache_key = cache_key
+        super().__init__(storage, cache_key)
         self._presentation: Presentation = presentation
         self._slide_paths = slide_paths
 
@@ -32,11 +31,29 @@ class SlidesCollection(CacheDecoratable):
 
     @dangerous_method
     def delete(self, index: int, do_garbage_collection: bool = True) -> None:
+        # delete
         delete_slide(loader=self._storage.loader, slide_index=make_pptx_index(index),
                      do_garbage_collection=do_garbage_collection)
-        raise NotImplementedError  # TODO update cache
+
+        # update cache
+        self._storage.cacher.delete_from_any_cache(self._storage_cache_key.make_son(str(index)))
+
+        for i in range(index+1, len(self)):
+            self._storage.cacher.rename_branch_in_any_cache(self._storage_cache_key.make_son(str(i)), str(i-1))
+
+        self._slide_paths.pop(index)
 
     @dangerous_method
     def delete_all_except(self, index: int) -> None:
+        # delete
         delete_all_slides_except(loader=self._storage.loader, slide_index=make_pptx_index(index))
-        raise NotImplementedError  # TODO update cache
+
+        # update cache
+        for i in range(0, len(self)):
+            if i == index:
+                continue
+            self._storage.cacher.delete_from_any_cache(self._storage_cache_key.make_son(str(i)))
+
+        self._storage.cacher.rename_branch_in_any_cache(self._storage_cache_key.make_son(str(index)), str(0))
+
+        self._slide_paths = [self._slide_paths[index]]

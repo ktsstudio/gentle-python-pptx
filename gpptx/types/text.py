@@ -227,6 +227,7 @@ class RunCollection(CacheDecoratable):
 
         # update cache
         self._run_xml_getters.pop(index)
+        self._storage.cacher.delete_from_any_cache(self._storage_cache_key.make_son(str(index)))
 
 
 class Paragraph(CacheDecoratableXmlNode):
@@ -454,6 +455,7 @@ class ParagraphCollection(CacheDecoratable):
 
         # update cache
         self._paragraph_xml_getters.pop(index)
+        self._storage.cacher.delete_from_any_cache(self._storage_cache_key.make_son(str(index)))
 
     @dangerous_method
     def clear(self) -> None:

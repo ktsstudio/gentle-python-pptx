@@ -1,7 +1,7 @@
 from abc import ABC
 from enum import Enum
 from operator import xor
-from typing import Optional, Callable
+from typing import Optional, Callable, Type
 
 from lxml import etree
 from lxml.etree import ElementTree
@@ -457,6 +457,12 @@ class UnknownShape(Shape):
 class ShapeDual(Shape, ABC):
     __slots__ = ()
 
+    def can_convert_to(self, t: Type[Shape]) -> bool:
+        raise NotImplementedError
+
+    def convert_to(self, t: Type[Shape]):
+        raise NotImplementedError
+
 
 class TextAndPlaceholderShapeDual(ShapeDual):
     __slots__ = ()
@@ -471,6 +477,15 @@ class TextAndPlaceholderShapeDual(ShapeDual):
     @property
     def as_placeholder(self) -> PlaceholderShape:
         return PlaceholderShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like)
+
+    def can_convert_to(self, t: Type[Shape]) -> bool:
+        return t == TextShape or t == PlaceholderShape
+
+    def convert_to(self, t: Type[Shape]):
+        if t == TextShape:
+            return self.as_text
+        elif t == PlaceholderShape:
+            return self.as_placeholder
 
 
 class ImageAndPlaceholderShapeDual(ShapeDual):
@@ -487,6 +502,15 @@ class ImageAndPlaceholderShapeDual(ShapeDual):
     @property
     def as_placeholder(self) -> PlaceholderShape:
         return PlaceholderShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like)
+
+    def can_convert_to(self, t: Type[Shape]) -> bool:
+        return t == ImageShape or t == PlaceholderShape
+
+    def convert_to(self, t: Type[Shape]):
+        if t == ImageShape:
+            return self.as_image
+        elif t == PlaceholderShape:
+            return self.as_placeholder
 
 
 class ImageAndPatternShapeDual(ShapeDual):
@@ -511,6 +535,15 @@ class ImageAndPatternShapeDual(ShapeDual):
     def as_pattern(self) -> PatternShape:
         return PatternShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like,
                             self._pattern_type)
+
+    def can_convert_to(self, t: Type[Shape]) -> bool:
+        return t == ImageShape or t == PatternShape
+
+    def convert_to(self, t: Type[Shape]):
+        if t == ImageShape:
+            return self.as_image
+        elif t == PatternShape:
+            return self.as_pattern
 
 
 class TextAndImageAndPatternShapeDual(ShapeDual):
@@ -539,3 +572,26 @@ class TextAndImageAndPatternShapeDual(ShapeDual):
     def as_pattern(self) -> PatternShape:
         return PatternShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like,
                             self._pattern_type)
+
+    def can_convert_to(self, t: Type[Shape]) -> bool:
+        return t == TextShape or t == ImageShape or t == PatternShape
+
+    def convert_to(self, t: Type[Shape]):
+        if t == TextShape:
+            return self.as_text
+        elif t == ImageShape:
+            return self.as_image
+        elif t == PatternShape:
+            return self.as_pattern
+
+
+def check_shape_type(shape: Shape, t: Type[Shape]) -> bool:
+    return isinstance(shape, t) or (isinstance(shape, ShapeDual) and shape.can_convert_to(t))
+
+
+def check_and_convert_shape_type(shape: Shape, t: Type[Shape]):
+    if isinstance(shape, t):
+        return shape
+    if isinstance(shape, ShapeDual) and shape.can_convert_to(t):
+        return shape.convert_to(t)
+    return None

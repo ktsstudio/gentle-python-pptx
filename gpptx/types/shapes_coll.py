@@ -19,12 +19,61 @@ from gpptx.util.annotations import dangerous_method
 class ShapesCollection(CacheDecoratable):
     __slots__ = ('_shape_xml_getters', '_shapes_root_getter', '_slide')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey,
-                 shape_xml_getters: LazyList, shapes_root_getter: Lazy, slide):
+    class ParentsBloodline:
+        def __init__(self):
+            self._buf = list()
+
+        def __iter__(self):
+            for v in self._buf:
+                yield v
+
+        def __getitem__(self, index):
+            return self._buf[index]
+
+        def __len__(self):
+            return len(self._buf)
+
+        def append(self, v):
+            self._buf.append(v)
+            return self
+
+        @property
+        def target(self):
+            return self._buf[0]
+
+        @property
+        def parent(self):
+            return self._buf[1]
+
+        @property
+        def grand_parent(self):
+            return self._buf[2]
+
+        @property
+        def grand_grand_parent(self):
+            return self._buf[3]
+
+        @property
+        def has_target(self) -> bool:
+            return len(self._buf) >= 1
+
+        @property
+        def has_parent(self) -> bool:
+            return len(self._buf) >= 2
+
+        @property
+        def has_grand_parent(self) -> bool:
+            return len(self._buf) >= 3
+
+        @property
+        def has_grand_grand_parent(self) -> bool:
+            return len(self._buf) >= 4
+
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getters: LazyList,
+                 shapes_root_getter: Lazy, slide):
         from gpptx.types.slide import SlideLike
 
-        self._storage = storage
-        self._storage_cache_key = cache_key
+        super().__init__(storage, )
         self._shape_xml_getters = shape_xml_getters
         self._shapes_root_getter = shapes_root_getter
         self._slide: SlideLike = slide
@@ -74,11 +123,12 @@ class ShapesCollection(CacheDecoratable):
         return shape_index
 
     @cache_local
-    def get_shape_parents_bloodline(self, shape_id: int) -> List[Shape]:
-        def dfs(node: Optional[Shape], children: ShapesCollection) -> Optional[List[Shape]]:
+    def get_shape_parents_bloodline(self, shape_id: int) -> ParentsBloodline:
+        def dfs(node: Optional[Shape], children: ShapesCollection) -> Optional:
             for child in children:
                 if child.shape_id == shape_id:
-                    return [child]
+                    path = self.ParentsBloodline()
+                    path.append(child)
                 elif isinstance(child, GroupShape):
                     path = dfs(child, child.shapes)
                     if path is not None:
@@ -87,14 +137,16 @@ class ShapesCollection(CacheDecoratable):
                         return path
             return None
 
-        reversed_path = dfs(None, self)
-        return list(reversed(reversed_path))
+        path = dfs(None, self)
+        if path is None:
+            return self.ParentsBloodline()
+        return path
 
     def get_shape_parent(self, shape_id: int) -> Optional[Shape]:
         parents_line = self.get_shape_parents_bloodline(shape_id)
         if len(parents_line) == 0:
             return None
-        return parents_line[-1]
+        return parents_line.parent
 
     @cache_persist_property
     def last_shape_id(self) -> int:
@@ -112,7 +164,9 @@ class ShapesCollection(CacheDecoratable):
         return self._make_shape(shape_type, shape_index)
 
     @cache_local
-    def flatten(self, keep_groups: bool = True) -> List[Shape]:
+    def flatten(self, keep_groups: bool = True, with_layout: bool = False) -> List[Shape]:
+        from gpptx.types.slide import Slide
+
         result = list()
 
         for shape in self:
@@ -124,15 +178,35 @@ class ShapesCollection(CacheDecoratable):
             else:
                 result.append(shape)
 
+        if with_layout:
+            if isinstance(self._slide, Slide):
+                result.extend(self._slide.slide_layout.shapes.flatten(keep_groups=keep_groups))
+
         return result
 
     @cache_local
-    def flatten_as_dict(self, keep_groups: bool = True) -> Dict[int, Shape]:
-        return {shape.shape_id: shape for shape in self.flatten(keep_groups=keep_groups)}
+    def flatten_as_dict(self, keep_groups: bool = True, with_layout: bool = False) -> Dict[int, Shape]:
+        return {shape.shape_id: shape for shape in self.flatten(keep_groups=keep_groups, with_layout=with_layout)}
 
     @dangerous_method
     def add(self, new_xml: ElementTree) -> int:
-        raise NotImplementedError  # TODO
+        # change shape id
+        last_shape_id = self.last_shape_id
+        new_shape_id = last_shape_id + 1
+        new_xml.xpath('p:nvSpPr[1]/p:cNvPr[1]', namespaces=pptx_xml_ns)[0].set('id', str(new_shape_id))
+
+        # add
+        self._slide.shapes_root_getter().append(new_xml)
+        self._slide.save_xml()
+
+        # update cache
+        self._shape_xml_getters.append(new_xml)
+        update_decorator_cache(self, 'last_shape_id', value=new_shape_id,
+                               do_change_persisting_cache=True)
+        clear_decorator_cache(self, 'flatten')
+        clear_decorator_cache(self, 'flatten_as_dict')
+
+        return new_shape_id
 
     @dangerous_method
     def delete(self, shape_id: int, do_affect_xml: bool = True, i_wont_save_cache: bool = False) -> None:
@@ -154,6 +228,7 @@ class ShapesCollection(CacheDecoratable):
         clear_decorator_cache(self, 'flatten_as_dict')
 
         self._shape_xml_getters.pop(shape_index)
+        self._storage.cacher.delete_from_any_cache(self._storage_cache_key.make_son(str(shape_index)))
 
     @dangerous_method
     def duplicate(self, shape_id: int) -> int:

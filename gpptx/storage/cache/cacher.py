@@ -119,6 +119,25 @@ class CachePrefixTree:
     def __contains__(self, key: CacheKey) -> bool:
         return self[key] is not None
 
+    def rename(self, key: CacheKey, new_name: str) -> None:
+        def rec(k: CacheKey):
+            if k.root == k:
+                branch = self._tree
+            else:
+                branch = rec(k.parent)
+
+            if k != key:
+                inner_branch = branch.get(k.name)
+                if inner_branch is None:
+                    inner_branch = CachePrefixTreeDict()
+                    branch[k.name] = inner_branch
+                return inner_branch
+            else:
+                branch[new_name] = branch[k.name]
+                del branch[k.name]
+
+        rec(key.this_or_son_from_postfix)
+
     def get_inner_tree(self) -> Dict[str, Any]:
         return self._tree
 
@@ -154,6 +173,16 @@ class Cacher:
         self.delete_from_persisting_cache(key)
         self.delete_from_local_cache(key)
 
+    def rename_branch_in_persisting_cache(self, key: CacheKey, new_name: str) -> None:
+        self._persisting_cache.rename(key, new_name)
+
+    def rename_branch_in_local_cache(self, key: CacheKey, new_name: str) -> None:
+        self._local_cache.rename(key, new_name)
+
+    def rename_branch_in_any_cache(self, key: CacheKey, new_name: str) -> None:
+        self.rename_branch_in_persisting_cache(key, new_name)
+        self.rename_branch_in_local_cache(key, new_name)
+
     def get_from_persisting_cache(self, key: CacheKey) -> Tuple[Optional[Any], bool]:
         return self._persisting_cache[key]
 
@@ -175,7 +204,7 @@ class Cacher:
     def duplicate(self):
         new_cacher = Cacher()
 
-        new_cacher._persisting_cache = copy.copy(self._persisting_cache)
+        new_cacher._persisting_cache = copy.deepcopy(self._persisting_cache)
         new_cacher._local_cache = copy.deepcopy(self._local_cache)
         new_cacher._is_persisting_cache_changed_since_load = self._is_in_persisting_cache_allowed_types
 
