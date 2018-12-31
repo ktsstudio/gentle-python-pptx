@@ -101,3 +101,30 @@ class Angle(int):
             return self
         else:
             return Angle((360 * self._ANGLE_POINTS) - self)
+
+
+class Percent(int):
+    _PERCENT_POINTS = 100000
+
+    def __new__(cls, percent_points: Union[int, float, str]):
+        if isinstance(percent_points, str):
+            percent_points = int(percent_points)
+        # noinspection PyArgumentList
+        # because of Pycharm internal error
+        return int.__new__(cls, percent_points)
+
+    @property
+    def fraction(self) -> float:
+        return self / self._PERCENT_POINTS
+
+    @property
+    def percent100(self) -> float:
+        return self / self._PERCENT_POINTS * 100
+
+    @classmethod
+    def from_fraction(cls, fraction: float):
+        return cls(fraction * cls._PERCENT_POINTS)
+
+    @classmethod
+    def from_percent100(cls, percent: float):
+        return cls(percent / 100 * cls._PERCENT_POINTS)

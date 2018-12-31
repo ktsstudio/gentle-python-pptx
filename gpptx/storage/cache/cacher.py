@@ -222,12 +222,12 @@ class Cacher:
             return True
         if self._is_in_persisting_cache_allowed_types(value):
             return True
-        if isinstance(value, list) and \
-                all(self._is_in_persisting_cache_allowed_types(it) for it in value):
+        if (isinstance(value, list) or isinstance(value, tuple)) and \
+                all(self._is_ok_for_persisting_cache(it) for it in value):
             return True
         if isinstance(value, dict) and \
                 all(isinstance(k, str) for k in value.keys()) and \
-                all(self._is_in_persisting_cache_allowed_types(v) for v in value.values()):
+                all(self._is_ok_for_persisting_cache(v) for v in value.values()):
             return True
         return False
 

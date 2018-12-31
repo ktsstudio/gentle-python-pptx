@@ -6,10 +6,11 @@ from typing import Optional, List
 from PIL import Image as PIL_Image
 from lxml.etree import ElementTree
 
+from gpptx.pptx_tools.paths import absolutize_filepath_relatively_to_content_dirs
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.decorator import cache_local_property, cache_persist_property
 from gpptx.types.fill import SolidFill, GradientFill
-from gpptx.types.units import Emu
+from gpptx.types.units import Emu, Percent
 from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.list import first_or_none
 
@@ -58,52 +59,92 @@ class RasterImage(Image):
         return ext_with_dot[1:]
 
     @cache_persist_property
-    def crop_left(self) -> Optional[Emu]:
+    def crop_left(self) -> Optional[Percent]:
         if self._src_rect is not None:
-            return Emu(self._src_rect.get('l'))
+            l_str = self._src_rect.get('l')
+            if l_str is not None:
+                return Percent(l_str)
         if self.do_use_defaults_when_null:
             return self._default_crop_left
         return None
 
     @property
-    def _default_crop_left(self) -> Emu:
-        return Emu(0)
+    def _default_crop_left(self) -> Percent:
+        return Percent(0)
+
+    @crop_left.serializer
+    def crop_left(self, v: Percent) -> int:
+        return int(v)
+
+    @crop_left.unserializer
+    def crop_left(self, v: int) -> Percent:
+        return Percent(v)
 
     @cache_persist_property
-    def crop_top(self) -> Optional[Emu]:
+    def crop_top(self) -> Optional[Percent]:
         if self._src_rect is not None:
-            return Emu(self._src_rect.get('t'))
+            t_str = self._src_rect.get('t')
+            if t_str is not None:
+                return Percent(t_str)
         if self.do_use_defaults_when_null:
             return self._default_crop_top
         return None
 
     @property
-    def _default_crop_top(self) -> Emu:
-        return Emu(0)
+    def _default_crop_top(self) -> Percent:
+        return Percent(0)
+
+    @crop_top.serializer
+    def crop_top(self, v: Percent) -> int:
+        return int(v)
+
+    @crop_top.unserializer
+    def crop_top(self, v: int) -> Percent:
+        return Percent(v)
 
     @cache_persist_property
-    def crop_right(self) -> Optional[Emu]:
+    def crop_right(self) -> Optional[Percent]:
         if self._src_rect is not None:
-            return Emu(self._src_rect.get('r'))
+            r_str = self._src_rect.get('r')
+            if r_str is not None:
+                return Percent(r_str)
         if self.do_use_defaults_when_null:
             return self._default_crop_right
         return None
 
     @property
-    def _default_crop_right(self) -> Emu:
-        return Emu(0)
+    def _default_crop_right(self) -> Percent:
+        return Percent(0)
+
+    @crop_right.serializer
+    def crop_right(self, v: Percent) -> int:
+        return int(v)
+
+    @crop_right.unserializer
+    def crop_right(self, v: int) -> Percent:
+        return Percent(v)
 
     @cache_persist_property
-    def crop_bottom(self) -> Optional[Emu]:
+    def crop_bottom(self) -> Optional[Percent]:
         if self._src_rect is not None:
-            return Emu(self._src_rect.get('b'))
+            b_str = self._src_rect.get('b')
+            if b_str is not None:
+                return Percent(b_str)
         if self.do_use_defaults_when_null:
             return self._default_crop_bottom
         return None
 
     @property
-    def _default_crop_bottom(self) -> Emu:
-        return Emu(0)
+    def _default_crop_bottom(self) -> Percent:
+        return Percent(0)
+
+    @crop_bottom.serializer
+    def crop_bottom(self, v: Percent) -> int:
+        return int(v)
+
+    @crop_bottom.unserializer
+    def crop_bottom(self, v: int) -> Percent:
+        return Percent(v)
 
     def replace_image(self, new_image_bytes: bytes) -> None:
         self._storage.loader.save_file(self._blob_path, new_image_bytes)
@@ -118,10 +159,10 @@ class RasterImage(Image):
         with BytesIO(blob) as in_buf:
             pil_image = PIL_Image.open(in_buf)
 
-            box = (int(self.crop_left * pil_image.width),
-                   int(self.crop_top * pil_image.height),
-                   int((1 - self.crop_right) * pil_image.width),
-                   int((1 - self.crop_bottom) * pil_image.height))
+            box = (int(self.crop_left.fraction * pil_image.width),
+                   int(self.crop_top.fraction * pil_image.height),
+                   int((1 - self.crop_right.fraction) * pil_image.width),
+                   int((1 - self.crop_bottom.fraction) * pil_image.height))
             cropped_image = pil_image.crop(box=box)
 
             with BytesIO() as out_buf:
@@ -140,11 +181,12 @@ class RasterImage(Image):
 
     @cache_local_property
     def _rel_id(self) -> str:
-        return self._blip_fill.xpath('a:blip[1]/@r:embed', namespaces=pptx_xml_ns)[0]
+        return self._blip_fill.xpath('a:blip[1]/@r_for_ids:embed', namespaces=pptx_xml_ns)[0]
 
     @cache_persist_property
     def _blob_path(self) -> str:
-        return self._shape.slide.rels.xpath(f"(Relationship[@Id='{self._rel_id}'])[1]/@Target")[0]
+        path = self._shape.slide.rels.xpath(f"r:Relationship[@Id='{self._rel_id}'][1]/@Target", namespaces=pptx_xml_ns)[0]
+        return absolutize_filepath_relatively_to_content_dirs(path)
 
 
 class VectorImage(Image):
@@ -281,7 +323,7 @@ class GradientPatternImage(Image):
     def _make_svg_linear_gradient(width: float, height: float,
                                   stops: List[GradientFill.GradientStop], direction: GradientFill.GradientDirection):
         def make_stop(percent: int, color: str, alpha: float) -> str:
-            return f'<stop offset="{percent}%" stop-color="#{color}" stop-alpha="{alpha}" />'
+            return f'<stop offset="{percent}%" stop-color="#{color}" stop-opacity="{alpha}" />'
 
         return f"""
             <svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">

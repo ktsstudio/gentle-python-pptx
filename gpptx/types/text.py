@@ -30,8 +30,6 @@ class VerticalAlign(Enum):
 
 
 class Run(CacheDecoratableXmlNode):
-    _DEFAULT_FONT_SIZE = Emu.from_pt(16)
-
     __slots__ = ('_run_xml_getter', '_paragraph')
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, run_xml_getter: Lazy,
@@ -82,7 +80,13 @@ class Run(CacheDecoratableXmlNode):
         sz_str = self._get_attrib('sz', do_recursive_find=self.do_use_defaults_when_null)
         if sz_str is not None:
             return Emu.from_centripoints(int(sz_str))
-        return self._DEFAULT_FONT_SIZE
+        if self.do_use_defaults_when_null:
+            return self._default_font_size
+        return None
+
+    @property
+    def _default_font_size(self) -> Emu:
+        return Emu.from_pt(16)
 
     @font_size.serializer
     def font_size(self, v: Emu) -> int:
@@ -97,27 +101,51 @@ class Run(CacheDecoratableXmlNode):
         color = self._get_color()
         if color is not None:
             return color.rgb_str
+        if self.do_use_defaults_when_null:
+            return self._default_color_rgb
         return None
+
+    @property
+    def _default_color_rgb(self) -> str:
+        return '000000'
 
     @cache_persist_property
     def color_alpha(self) -> Optional[float]:
         color = self._get_color()
         if color is not None:
             return color.alpha
+        if self.do_use_defaults_when_null:
+            return self._default_color_alpha
         return None
+
+    @property
+    def _default_color_alpha(self) -> float:
+        return 1
 
     @cache_persist_property
     def is_bold(self) -> Optional[bool]:
         b_str = self._get_attrib('b', do_recursive_find=self.do_use_defaults_when_null)
         if b_str is not None:
-            return bool(b_str)
+            return bool(int(b_str))
+        if self.do_use_defaults_when_null:
+            return self._default_is_bold
+        return None
+
+    @property
+    def _default_is_bold(self) -> bool:
         return False
 
     @cache_persist_property
     def is_italic(self) -> Optional[bool]:
         i_str = self._get_attrib('i', do_recursive_find=self.do_use_defaults_when_null)
         if i_str is not None:
-            return bool(i_str)
+            return bool(int(i_str))
+        if self.do_use_defaults_when_null:
+            return self._default_is_italic
+        return None
+
+    @property
+    def _default_is_italic(self) -> bool:
         return False
 
     @cache_local_property

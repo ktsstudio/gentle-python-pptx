@@ -7,19 +7,19 @@ from lxml.etree import ElementTree
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.decorator import cache_local_property, cache_persist_property
 from gpptx.types.color import Color
-from gpptx.types.units import Angle
-from gpptx.types.xml_node import XmlNode
+from gpptx.types.units import Angle, Percent
+from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.list import first_or_none
 
 
-class Fill(XmlNode, ABC):
+class Fill(CacheDecoratableXmlNode, ABC):
     __slots__ = ('_shape',)
 
     def __init__(self, shape):
         from gpptx.types.shape import Shape
 
-        super().__init__()
         self._shape: Shape = shape
+        super().__init__(self._shape._storage, self._shape._storage_cache_key.make_son('fill'))
 
     @property
     def xml(self) -> ElementTree:
@@ -34,7 +34,7 @@ class SolidFill(Fill):
 
     @cache_persist_property
     def color_rgb(self) -> str:
-        return self._color.rgb
+        return self._color.rgb_str
 
     @cache_persist_property
     def color_alpha(self) -> float:
@@ -78,10 +78,10 @@ class GradientFill(Fill):
         result = list()
         color_maker = self._shape.color_maker
         for gs in self._gs_lst:
-            percent = int(gs.get('pos'))
+            percent = Percent(gs.get('pos', 0))
             color_xml = next(iter(gs))
             color = color_maker.make_color(color_xml)
-            result.append(self.GradientStop(percent, color.rgb_str, color.alpha))
+            result.append(self.GradientStop(int(percent.percent100), color.rgb_str, color.alpha))
         return result
 
     @gradient_stops.serializer

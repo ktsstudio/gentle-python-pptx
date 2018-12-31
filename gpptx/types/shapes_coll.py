@@ -269,7 +269,7 @@ class ShapesCollection(CacheDecoratable):
 
         is_pic = 'pic' in shape_xml.tag
         if is_pic:
-            return ShapeType.IMAGE
+            return ShapeType.RASTER_IMAGE
 
         has_tx_body = len(shape_xml.xpath('p:txBody[1]', namespaces=pptx_xml_ns)) == 1
         has_solid_fill = len(shape_xml.xpath('p:spPr[1]/a:solidFill[1]', namespaces=pptx_xml_ns)) == 1

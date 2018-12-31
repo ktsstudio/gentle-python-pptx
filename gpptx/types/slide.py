@@ -50,6 +50,10 @@ class SlideLike(CacheDecoratableXmlNode, ABC):
     def height(self) -> Emu:
         return self._presentation.slide_height
 
+    @property
+    def xml_path(self) -> str:
+        raise NotImplementedError
+
     @help_lazy_list_property
     def _shape_xmls(self) -> LazyList:
         def find() -> List[ElementTree]:
@@ -93,6 +97,10 @@ class SlideMaster(SlideLike):
         return self._storage.loader.save_file_xml(self._xml_path, self.xml)
 
     @property
+    def xml_path(self) -> str:
+        return self._xml_path
+
+    @property
     def rels(self) -> ElementTree:
         return self._storage.loader.get_file_xml(make_rels_path(self._xml_path))
 
@@ -124,6 +132,10 @@ class SlideLayout(SlideLike):
 
     def save_xml(self) -> None:
         return self._storage.loader.save_file_xml(self._xml_path, self.xml)
+
+    @property
+    def xml_path(self) -> str:
+        return self._xml_path
 
     @property
     def rels(self) -> ElementTree:
@@ -161,6 +173,10 @@ class Slide(SlideLike):
 
     def save_xml(self) -> None:
         return self._storage.loader.save_file_xml(self._xml_path, self.xml)
+
+    @property
+    def xml_path(self) -> str:
+        return self._xml_path
 
     @property
     def rels(self) -> ElementTree:

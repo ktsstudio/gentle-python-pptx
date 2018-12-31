@@ -44,6 +44,9 @@ class Shape(CacheDecoratableXmlNode, ABC):
         self._shape_xml_getter = shape_xml_getter
         self._slide_like = slide_like
 
+    def __str__(self) -> str:
+        return f'{type(self).__name__} {self.shape_id}'
+
     @property
     def xml(self) -> ElementTree:
         return self._shape_xml_getter()
@@ -213,7 +216,7 @@ class Shape(CacheDecoratableXmlNode, ABC):
 
     @cache_local_property
     def _sp_pr(self) -> Optional[ElementTree]:
-        return first_or_none(self.xml.xpath('p:spPr[1]', namespaces=pptx_xml_ns))
+        return first_or_none(self.xml.xpath(f'p:{self._sp_pr_name}[1]', namespaces=pptx_xml_ns))
 
     @cache_local_property
     def _xfrm(self) -> Optional[ElementTree]:
@@ -233,8 +236,14 @@ class Shape(CacheDecoratableXmlNode, ABC):
             return None
         return first_or_none(self._xfrm.xpath('a:ext[1]', namespaces=pptx_xml_ns))
 
+    @property
+    def _sp_pr_name(self) -> str:
+        if isinstance(self, GroupShape):
+            return 'grpSpPr'
+        return 'spPr'
+
     def _make_new_sp_pr(self):
-        new_sp_pr = etree.Element('{%s}spPr' % pptx_xml_ns['p'])
+        new_sp_pr = etree.Element('{%s}%s' % (pptx_xml_ns['p'], self._sp_pr_name))
         self.xml.append(new_sp_pr)
         update_decorator_cache(self, '_sp_pr', new_sp_pr, do_change_persisting_cache=False)
 
@@ -376,7 +385,7 @@ class GroupShape(Shape):
     @help_lazy_list_property
     def _shape_xmls(self) -> LazyList:
         def find():
-            els = self.xml.xpath('./*/p:spPr[1]/..', namespaces=pptx_xml_ns)
+            els = self.xml.xpath('./*/*/p:cNvPr[1]/../..', namespaces=pptx_xml_ns)
 
             els_at_indexes_to_remove = list()
             for i, el in enumerate(els):
