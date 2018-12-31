@@ -129,6 +129,7 @@ class ShapesCollection(CacheDecoratable):
                 if child.shape_id == shape_id:
                     path = self.ParentsBloodline()
                     path.append(child)
+                    return path
                 elif isinstance(child, GroupShape):
                     path = dfs(child, child.shapes)
                     if path is not None:
