@@ -10,7 +10,7 @@ from gpptx.pptx_tools.paths import relativize_filepath_relatively_to_root, \
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.pptx.loader import Loader
 
-_REL_INDEX_REGEXP = re.compile('^rId(\d+)$')
+_REL_INDEX_REGEXP = re.compile(r'^rId(\d+)$')
 
 
 def create_blank_rels(loader: Loader, filepath: str) -> None:

@@ -165,11 +165,11 @@ class _CacheDecoratorMethod(_BaseCacheDecorator):
             return
         setattr(self._fn, k, v)
 
-    def cache_serializer(self, serializer_fn: Callable[[Any], Any]):
+    def serializer(self, serializer_fn: Callable[[Any], Any]):
         self._serializer_fn = serializer_fn
         return self
 
-    def cache_unserializer(self, unserializer_fn: Callable[[Any], Any]):
+    def unserializer(self, unserializer_fn: Callable[[Any], Any]):
         self._unserializer_fn = unserializer_fn
         return self
 
@@ -206,11 +206,11 @@ class _CacheDecoratorProperty(_BaseCacheDecorator):
         self._setter_fn = setter_fn
         return self
 
-    def cache_serializer(self, serializer_fn: Callable[[Any], Any]):
+    def serializer(self, serializer_fn: Callable[[Any], Any]):
         self._serializer_fn = serializer_fn
         return self
 
-    def cache_unserializer(self, unserializer_fn: Callable[[Any], Any]):
+    def unserializer(self, unserializer_fn: Callable[[Any], Any]):
         self._unserializer_fn = unserializer_fn
         return self
 

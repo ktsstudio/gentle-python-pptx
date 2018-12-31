@@ -77,11 +77,11 @@ class Shape(CacheDecoratableXmlNode, ABC):
             return Emu(0)
         return None
 
-    @x.cache_serializer
+    @x.serializer
     def x(self, v: Emu) -> int:
         return int(v)
 
-    @x.cache_unserializer
+    @x.unserializer
     def x(self, v: int) -> Emu:
         return Emu(v)
 
@@ -107,11 +107,11 @@ class Shape(CacheDecoratableXmlNode, ABC):
             return Emu(0)
         return None
 
-    @y.cache_serializer
+    @y.serializer
     def y(self, v: Emu) -> int:
         return int(v)
 
-    @y.cache_unserializer
+    @y.unserializer
     def y(self, v: int) -> Emu:
         return Emu(v)
 
@@ -137,11 +137,11 @@ class Shape(CacheDecoratableXmlNode, ABC):
             return Emu(0)
         return None
 
-    @width.cache_serializer
+    @width.serializer
     def width(self, v: Emu) -> int:
         return int(v)
 
-    @width.cache_unserializer
+    @width.unserializer
     def width(self, v: int) -> Emu:
         return Emu(v)
 
@@ -167,11 +167,11 @@ class Shape(CacheDecoratableXmlNode, ABC):
             return Emu(0)
         return None
 
-    @height.cache_serializer
+    @height.serializer
     def height(self, v: Emu) -> int:
         return int(v)
 
-    @height.cache_unserializer
+    @height.unserializer
     def height(self, v: int) -> Emu:
         return Emu(v)
 
@@ -319,11 +319,11 @@ class GroupShape(Shape):
                 return Emu(x_str)
         return Emu(0)
 
-    @children_offset_x.cache_serializer
+    @children_offset_x.serializer
     def children_offset_x(self, v: Emu) -> int:
         return int(v)
 
-    @children_offset_x.cache_unserializer
+    @children_offset_x.unserializer
     def children_offset_x(self, v: int) -> Emu:
         return Emu(v)
 
@@ -335,11 +335,11 @@ class GroupShape(Shape):
                 return Emu(y_str)
         return Emu(0)
 
-    @children_offset_y.cache_serializer
+    @children_offset_y.serializer
     def children_offset_y(self, v: Emu) -> int:
         return int(v)
 
-    @children_offset_y.cache_unserializer
+    @children_offset_y.unserializer
     def children_offset_y(self, v: int) -> Emu:
         return Emu(v)
 
@@ -438,11 +438,11 @@ class PlaceholderShape(Shape):
             return PlaceholderType.TITLE
         return PlaceholderType.UNKNOWN
 
-    @placeholder_type.cache_serializer
+    @placeholder_type.serializer
     def placeholder_type(self, v: PlaceholderType) -> int:
         return v.value
 
-    @placeholder_type.cache_unserializer
+    @placeholder_type.unserializer
     def placeholder_type(self, v: int) -> PlaceholderType:
         return PlaceholderType(v)
 

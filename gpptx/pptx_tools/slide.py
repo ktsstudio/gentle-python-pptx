@@ -21,7 +21,7 @@ def delete_mention_in_slide(loader: Loader, slide_id: int, slide_id_to_delete: i
 def delete_shapes_with_relation(loader: Loader, slide_filepath: str, r_id_to_delete: str):
     xml = loader.get_file_xml(slide_filepath)
 
-    items_xml = xml.xpath(f'.//p:sp//*[@r:id="{r_id_to_delete}"]/ancestor-or-self::p:sp', namespaces=pptx_xml_ns)
+    items_xml = xml.xpath(f'.//p:sp//*[@r_for_ids:id="{r_id_to_delete}"]/ancestor-or-self::p:sp', namespaces=pptx_xml_ns)
     for it in items_xml:
         it.getparent().remove(it)
 
@@ -66,6 +66,6 @@ def delete_all_slides_except(loader: Loader, slide_index: int) -> None:
     for i in reversed(range(1, last_slide_index + 1)):
         if i == slide_index:
             continue
-        delete_slide(loader=loader, slide_index=slide_index, do_garbage_collection=False)
+        delete_slide(loader=loader, slide_index=i, do_garbage_collection=False)
 
     delete_unused_media(loader=loader)

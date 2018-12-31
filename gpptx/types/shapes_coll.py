@@ -73,7 +73,7 @@ class ShapesCollection(CacheDecoratable):
                  shapes_root_getter: Lazy, slide):
         from gpptx.types.slide import SlideLike
 
-        super().__init__(storage, )
+        super().__init__(storage, cache_key)
         self._shape_xml_getters = shape_xml_getters
         self._shapes_root_getter = shapes_root_getter
         self._slide: SlideLike = slide
@@ -137,10 +137,10 @@ class ShapesCollection(CacheDecoratable):
                         return path
             return None
 
-        path = dfs(None, self)
-        if path is None:
+        line = dfs(None, self)
+        if line is None:
             return self.ParentsBloodline()
-        return path
+        return line
 
     def get_shape_parent(self, shape_id: int) -> Optional[Shape]:
         parents_line = self.get_shape_parents_bloodline(shape_id)
@@ -196,6 +196,7 @@ class ShapesCollection(CacheDecoratable):
         new_xml.xpath('p:nvSpPr[1]/p:cNvPr[1]', namespaces=pptx_xml_ns)[0].set('id', str(new_shape_id))
 
         # add
+        # noinspection PyUnresolvedReferences
         self._slide.shapes_root_getter().append(new_xml)
         self._slide.save_xml()
 
@@ -242,6 +243,7 @@ class ShapesCollection(CacheDecoratable):
         xml_copy.xpath('p:nvSpPr[1]/p:cNvPr[1]', namespaces=pptx_xml_ns)[0].set('id', str(copy_shape_id))
 
         # add
+        # noinspection PyUnresolvedReferences
         self._slide.shapes_root_getter().append(xml_copy)
         self._slide.save_xml()
 
@@ -303,11 +305,11 @@ class ShapesCollection(CacheDecoratable):
 
         return ShapeType.UNKNOWN
 
-    @_get_shape_type.cache_serializer
+    @_get_shape_type.serializer
     def _get_shape_type(self, v: ShapeType) -> int:
         return v.value
 
-    @_get_shape_type.cache_unserializer
+    @_get_shape_type.unserializer
     def _get_shape_type(self, v: int) -> ShapeType:
         return ShapeType(v)
 

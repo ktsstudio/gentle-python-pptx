@@ -35,7 +35,7 @@ def add_slide_mention_in_presentation(loader: Loader, relation_id: str) -> None:
 def delete_slide_mention_in_presentation(loader: Loader, relation_id: str) -> None:
     xml = loader.get_file_xml(PRESENTATION_PATH)
 
-    item_xml = xml.xpath(f'p:sldIdLst/p:sldId[@r:id="{relation_id}"][1]', namespaces=pptx_xml_ns)[0]
+    item_xml = xml.xpath(f'p:sldIdLst/p:sldId[@r_for_ids:id="{relation_id}"][1]', namespaces=pptx_xml_ns)[0]
     item_xml.getparent().remove(item_xml)
 
     loader.save_file_xml(PRESENTATION_PATH, xml)

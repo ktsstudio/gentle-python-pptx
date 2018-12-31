@@ -84,11 +84,11 @@ class Run(CacheDecoratableXmlNode):
             return Emu.from_centripoints(int(sz_str))
         return self._DEFAULT_FONT_SIZE
 
-    @font_size.cache_serializer
+    @font_size.serializer
     def font_size(self, v: Emu) -> int:
         return int(v)
 
-    @font_size.cache_unserializer
+    @font_size.unserializer
     def font_size(self, v: int) -> Emu:
         return Emu(v)
 
@@ -176,10 +176,8 @@ class Run(CacheDecoratableXmlNode):
 class RunCollection(CacheDecoratable):
     __slots__ = ('_run_xml_getters', '_paragraph')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey,
-                 run_xml_getters: LazyList, paragraph):
-        self._storage = storage
-        self._storage_cache_key = cache_key
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, run_xml_getters: LazyList, paragraph):
+        super().__init__(storage, cache_key)
         self._run_xml_getters = run_xml_getters
         self._paragraph: Paragraph = paragraph
 
@@ -256,6 +254,8 @@ class Paragraph(CacheDecoratableXmlNode):
 
     @property
     def text(self) -> str:
+        # noinspection PyPropertyAccess
+        # because of Pycharm internal error
         return ' '.join(r.text for r in self.runs)
 
     @cache_persist_property
@@ -272,11 +272,11 @@ class Paragraph(CacheDecoratableXmlNode):
             return HorizontalAlign.LEFT
         return None
 
-    @align.cache_serializer
+    @align.serializer
     def align(self, v: HorizontalAlign) -> int:
         return v.value
 
-    @align.cache_unserializer
+    @align.unserializer
     def align(self, v: int) -> HorizontalAlign:
         return HorizontalAlign(v)
 
@@ -296,7 +296,7 @@ class Paragraph(CacheDecoratableXmlNode):
             return 1.00001
         return None
 
-    @line_height.cache_serializer
+    @line_height.serializer
     def line_height(self, v: Union[float, Emu]) -> Union[float, int]:
         if isinstance(v, Emu):
             return int(v)
@@ -305,7 +305,7 @@ class Paragraph(CacheDecoratableXmlNode):
         elif isinstance(v, int):
             return float(v)
 
-    @line_height.cache_unserializer
+    @line_height.unserializer
     def line_height(self, v: Union[float, int]) -> Union[float, Emu]:
         if isinstance(v, float):
             return v
@@ -332,11 +332,11 @@ class Paragraph(CacheDecoratableXmlNode):
             return Emu.from_px(32)
         return None
 
-    @level_width.cache_serializer
+    @level_width.serializer
     def level_width(self, v: Emu) -> int:
         return int(v)
 
-    @level_width.cache_unserializer
+    @level_width.unserializer
     def level_width(self, v: int) -> Emu:
         return Emu(v)
 
@@ -351,11 +351,11 @@ class Paragraph(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @margin_top.cache_serializer
+    @margin_top.serializer
     def margin_top(self, v: Emu) -> int:
         return int(v)
 
-    @margin_top.cache_unserializer
+    @margin_top.unserializer
     def margin_top(self, v: int) -> Emu:
         return Emu(v)
 
@@ -370,11 +370,11 @@ class Paragraph(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @margin_bottom.cache_serializer
+    @margin_bottom.serializer
     def margin_bottom(self, v: Emu) -> int:
         return int(v)
 
-    @margin_bottom.cache_unserializer
+    @margin_bottom.unserializer
     def margin_bottom(self, v: int) -> Emu:
         return Emu(v)
 
@@ -399,8 +399,8 @@ class Paragraph(CacheDecoratableXmlNode):
 class ParagraphCollection(CacheDecoratable):
     __slots__ = ('_paragraph_xml_getters', '_text_frame')
 
-    def __init__(self, storage: PresentationStorage, cache_key: CacheKey,
-                 paragraph_xml_getters: LazyList, text_frame):
+    def __init__(self, storage: PresentationStorage, cache_key: CacheKey, paragraph_xml_getters: LazyList, text_frame):
+        super().__init__(storage, cache_key)
         self._storage = storage
         self._storage_cache_key = cache_key
         self._paragraph_xml_getters = paragraph_xml_getters
@@ -509,11 +509,11 @@ class TextFrame(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @margin_left.cache_serializer
+    @margin_left.serializer
     def margin_left(self, v: Emu) -> int:
         return int(v)
 
-    @margin_left.cache_unserializer
+    @margin_left.unserializer
     def margin_left(self, v: int) -> Emu:
         return Emu(v)
 
@@ -527,11 +527,11 @@ class TextFrame(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @margin_top.cache_serializer
+    @margin_top.serializer
     def margin_top(self, v: Emu) -> int:
         return int(v)
 
-    @margin_top.cache_unserializer
+    @margin_top.unserializer
     def margin_top(self, v: int) -> Emu:
         return Emu(v)
 
@@ -545,11 +545,11 @@ class TextFrame(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @margin_right.cache_serializer
+    @margin_right.serializer
     def margin_right(self, v: Emu) -> int:
         return int(v)
 
-    @margin_right.cache_unserializer
+    @margin_right.unserializer
     def margin_right(self, v: int) -> Emu:
         return Emu(v)
 
@@ -563,11 +563,11 @@ class TextFrame(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @margin_bottom.cache_serializer
+    @margin_bottom.serializer
     def margin_bottom(self, v: Emu) -> int:
         return int(v)
 
-    @margin_bottom.cache_unserializer
+    @margin_bottom.unserializer
     def margin_bottom(self, v: int) -> Emu:
         return Emu(v)
 
@@ -586,11 +586,11 @@ class TextFrame(CacheDecoratableXmlNode):
             return VerticalAlign.TOP
         return None
 
-    @vertical_align.cache_serializer
+    @vertical_align.serializer
     def vertical_align(self, v: VerticalAlign) -> int:
         return v.value
 
-    @vertical_align.cache_unserializer
+    @vertical_align.unserializer
     def vertical_align(self, v: int) -> VerticalAlign:
         return VerticalAlign(v)
 

@@ -65,7 +65,7 @@ def find_last_index_of_content(loader, content_name: str, dir_name: Optional[str
     if dir_name is None:
         dir_name = f'{content_name}s'
 
-    path_index_regex = re.compile(f'^ppt/{dir_name}/{content_name}(\d+)')
+    path_index_regex = re.compile(rf'^ppt/{dir_name}/{content_name}(\d+)')
 
     last_index = 0
 

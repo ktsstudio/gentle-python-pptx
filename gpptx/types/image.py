@@ -9,7 +9,6 @@ from lxml.etree import ElementTree
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.cache.decorator import cache_local_property, cache_persist_property
 from gpptx.types.fill import SolidFill, GradientFill
-from gpptx.types.shape import PatternShape
 from gpptx.types.units import Emu
 from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.list import first_or_none
@@ -216,10 +215,14 @@ class SolidPatternImage(Image):
         return 'svg'
 
     def _make_svg(self) -> str:
+        from gpptx.types.shape import PatternShape
+
         shape: PatternShape = self._shape
         fill: SolidFill = shape.fill
+        # noinspection PyPropertyAccess
+        # because of Pycharm internal error
         return self._make_svg_solid(width=shape.width.px, height=shape.height.px,
-                                    color=fill.color.rgb_str, opacity=fill.color.alpha)
+                                    color=fill.color_rgb, opacity=fill.color_alpha)
 
     @staticmethod
     def _make_svg_solid(width: float, height: float, color: str, opacity: float):
@@ -245,10 +248,14 @@ class GradientPatternImage(Image):
         return 'svg'
 
     def _make_svg(self) -> str:
+        from gpptx.types.shape import PatternShape
+
         shape: PatternShape = self._shape
         fill: GradientFill = shape.fill
 
         if fill.is_linear_gradient:
+            # noinspection PyPropertyAccess
+            # because of Pycharm internal error
             return self._make_svg_linear_gradient(width=shape.width.px, height=shape.height.px,
                                                   stops=fill.gradient_stops, direction=fill.gradient_direction)
         else:

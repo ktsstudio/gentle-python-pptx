@@ -3,5 +3,6 @@ pptx_xml_ns = {
     'c': 'http://schemas.openxmlformats.org/package/2006/content-types',
     'p': 'http://schemas.openxmlformats.org/presentationml/2006/main',
     'p14': 'http://schemas.microsoft.com/office/powerpoint/2010/main',
-    'r': 'http://schemas.openxmlformats.org/package/2006/relationships'
+    'r': 'http://schemas.openxmlformats.org/package/2006/relationships',
+    'r_for_ids': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 }

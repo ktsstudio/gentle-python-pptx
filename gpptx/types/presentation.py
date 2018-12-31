@@ -15,7 +15,7 @@ from gpptx.util.list import first_or_none
 
 
 class Presentation(CacheDecoratableXmlNode):
-    _SLIDE_ID_REGEX = re.compile('ppt/slides/slide(\d+).xml')
+    _SLIDE_ID_REGEX = re.compile(r'ppt/slides/slide(\d+).xml')
 
     __slots__ = ()
 
@@ -41,11 +41,11 @@ class Presentation(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @slide_width.cache_serializer
+    @slide_width.serializer
     def slide_width(self, v: Emu) -> int:
         return int(v)
 
-    @slide_width.cache_unserializer
+    @slide_width.unserializer
     def slide_width(self, v: int) -> Emu:
         return Emu(v)
 
@@ -57,11 +57,11 @@ class Presentation(CacheDecoratableXmlNode):
             return Emu(0)
         return None
 
-    @slide_height.cache_serializer
+    @slide_height.serializer
     def slide_height(self, v: Emu) -> int:
         return int(v)
 
-    @slide_height.cache_unserializer
+    @slide_height.unserializer
     def slide_height(self, v: int) -> Emu:
         return Emu(v)
 

@@ -9,7 +9,7 @@ from gpptx.pptx_tools.rels import create_blank_rels
 from gpptx.pptx_tools.xml_namespaces import pptx_xml_ns
 from gpptx.storage.pptx.loader import Loader
 
-_PATH_DIR_CONTENT_NAME_EXT_REGEX = re.compile('^\.\./(.+?)/(.+?)\d+\.(.+)$')
+_PATH_DIR_CONTENT_NAME_EXT_REGEX = re.compile(r'^\.\./(.+?)/(.+?)\d+\.(.+)$')
 
 
 class _CopyRelationState:
