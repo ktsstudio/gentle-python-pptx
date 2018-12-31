@@ -57,37 +57,53 @@ class RasterImage(Image):
         ext_with_dot = parts[1]
         return ext_with_dot[1:]
 
-    @property
+    @cache_persist_property
     def crop_left(self) -> Optional[Emu]:
         if self._src_rect is not None:
             return Emu(self._src_rect.get('l'))
-        if self._do_use_defaults_when_null:
-            return Emu(0)
+        if self.do_use_defaults_when_null:
+            return self._default_crop_left
         return None
 
     @property
+    def _default_crop_left(self) -> Emu:
+        return Emu(0)
+
+    @cache_persist_property
     def crop_top(self) -> Optional[Emu]:
         if self._src_rect is not None:
             return Emu(self._src_rect.get('t'))
-        if self._do_use_defaults_when_null:
-            return Emu(0)
+        if self.do_use_defaults_when_null:
+            return self._default_crop_top
         return None
 
     @property
+    def _default_crop_top(self) -> Emu:
+        return Emu(0)
+
+    @cache_persist_property
     def crop_right(self) -> Optional[Emu]:
         if self._src_rect is not None:
             return Emu(self._src_rect.get('r'))
-        if self._do_use_defaults_when_null:
-            return Emu(0)
+        if self.do_use_defaults_when_null:
+            return self._default_crop_right
         return None
 
     @property
+    def _default_crop_right(self) -> Emu:
+        return Emu(0)
+
+    @cache_persist_property
     def crop_bottom(self) -> Optional[Emu]:
         if self._src_rect is not None:
             return Emu(self._src_rect.get('b'))
-        if self._do_use_defaults_when_null:
-            return Emu(0)
+        if self.do_use_defaults_when_null:
+            return self._default_crop_bottom
         return None
+
+    @property
+    def _default_crop_bottom(self) -> Emu:
+        return Emu(0)
 
     def replace_image(self, new_image_bytes: bytes) -> None:
         self._storage.loader.save_file(self._blob_path, new_image_bytes)

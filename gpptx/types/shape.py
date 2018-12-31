@@ -15,7 +15,7 @@ from gpptx.storage.storage import PresentationStorage
 from gpptx.types.color_maker import ColorMaker
 from gpptx.types.fill import Fill, SolidFill, GradientFill
 from gpptx.types.image import Image, SolidPatternImage, GradientPatternImage, PlaceholderImage
-from gpptx.types.text import TextFrame
+from gpptx.types.text import TextFrame, VerticalAlign, HorizontalAlign
 from gpptx.types.units import Emu
 from gpptx.types.xml_node import CacheDecoratableXmlNode
 from gpptx.util.list import first_or_none
@@ -74,8 +74,12 @@ class Shape(CacheDecoratableXmlNode, ABC):
             if x_str is not None:
                 return Emu(x_str)
         if self.do_use_defaults_when_null:
-            return Emu(0)
+            return self._default_x
         return None
+
+    @property
+    def _default_x(self) -> Emu:
+        return Emu(0)
 
     @x.serializer
     def x(self, v: Emu) -> int:
@@ -104,8 +108,12 @@ class Shape(CacheDecoratableXmlNode, ABC):
             if y_str is not None:
                 return Emu(y_str)
         if self.do_use_defaults_when_null:
-            return Emu(0)
+            return self._default_y
         return None
+
+    @property
+    def _default_y(self) -> Emu:
+        return Emu(0)
 
     @y.serializer
     def y(self, v: Emu) -> int:
@@ -134,8 +142,12 @@ class Shape(CacheDecoratableXmlNode, ABC):
             if cx_str is not None:
                 return Emu(cx_str)
         if self.do_use_defaults_when_null:
-            return Emu(0)
+            return self._default_width
         return None
+
+    @property
+    def _default_width(self) -> Emu:
+        return Emu(0)
 
     @width.serializer
     def width(self, v: Emu) -> int:
@@ -164,8 +176,12 @@ class Shape(CacheDecoratableXmlNode, ABC):
             if cy_str is not None:
                 return Emu(cy_str)
         if self.do_use_defaults_when_null:
-            return Emu(0)
+            return self._default_height
         return None
+
+    @property
+    def _default_height(self) -> Emu:
+        return Emu(0)
 
     @height.serializer
     def height(self, v: Emu) -> int:
@@ -254,6 +270,14 @@ class TextShape(Shape):
     def text_frame(self) -> TextFrame:
         return TextFrame(self._storage, self._storage_cache_key.make_son('text_frame'),
                          LazyByFunction(lambda: self._tx_body), self)
+
+    @property
+    def _default_vertical_align(self) -> VerticalAlign:
+        return VerticalAlign.TOP
+
+    @property
+    def _default_horizontal_align(self) -> HorizontalAlign:
+        return HorizontalAlign.LEFT
 
     @cache_local_property
     def _tx_body(self) -> Optional[ElementTree]:
@@ -395,15 +419,69 @@ class PlaceholderType(Enum):
     UNKNOWN = 17
 
 
-class PlaceholderShape(Shape):
+# noinspection PyUnresolvedReferences,PyProtectedMember
+class _PlaceholderShapeOverrides:
+    """
+    Deriving class must have attributes:
+        _placeholder_type_fn: Callable[[], PlaceholderType]
+        _slide_like: SlideLike
+    """
+
     __slots__ = ()
+
+    @property
+    def _default_x(self) -> Emu:
+        if self._placeholder_type_fn() == PlaceholderType.CENTER_TITLE:
+            return Emu(0)
+        else:
+            return super()._default_x
+
+    @property
+    def _default_y(self) -> Emu:
+        if self._placeholder_type_fn() == PlaceholderType.CENTER_TITLE:
+            return Emu(0)
+        else:
+            return super()._default_y
+
+    @property
+    def _default_width(self) -> Emu:
+        if self._placeholder_type_fn() == PlaceholderType.CENTER_TITLE:
+            return self._slide_like.width
+        else:
+            return super()._default_width
+
+    @property
+    def _default_height(self) -> Emu:
+        if self._placeholder_type_fn() == PlaceholderType.CENTER_TITLE:
+            return self._slide_like.height
+        else:
+            return super()._default_height
+
+    @property
+    def _default_vertical_align(self) -> VerticalAlign:
+        if self._placeholder_type_fn() == PlaceholderType.CENTER_TITLE:
+            return VerticalAlign.CENTER
+        else:
+            return super()._default_vertical_align
+
+    @property
+    def _default_horizontal_align(self) -> HorizontalAlign:
+        if self._placeholder_type_fn() == PlaceholderType.CENTER_TITLE:
+            return HorizontalAlign.CENTER
+        else:
+            return super()._default_horizontal_align
+
+
+class PlaceholderShape(_PlaceholderShapeOverrides, Shape):
+    __slots__ = ('_placeholder_type_fn',)
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
+        self._placeholder_type_fn = lambda: self.placeholder_type
 
     @cache_persist_property
     def placeholder_type(self) -> PlaceholderType:
-        type_ = self.xml.get('type')
+        type_ = self._ph.get('type')
         if type_ == 'clipArt':
             return PlaceholderType.BITMAP
         elif type_ == 'body':
@@ -446,6 +524,10 @@ class PlaceholderShape(Shape):
     def placeholder_type(self, v: int) -> PlaceholderType:
         return PlaceholderType(v)
 
+    @cache_local_property
+    def _ph(self) -> ElementTree:
+        return self.xml.xpath('p:nvSpPr[1]/p:nvPr[1]/p:ph[1]', namespaces=pptx_xml_ns)[0]
+
 
 class UnknownShape(Shape):
     __slots__ = ()
@@ -464,15 +546,24 @@ class ShapeDual(Shape, ABC):
         raise NotImplementedError
 
 
-class TextAndPlaceholderShapeDual(ShapeDual):
-    __slots__ = ()
+class TextAndPlaceholderShapeDual(_PlaceholderShapeOverrides, ShapeDual):
+    __slots__ = ('_placeholder_type_fn',)
+
+    class _TextShapeOverrided(_PlaceholderShapeOverrides, TextShape):
+        __slots__ = ('_placeholder_type_fn',)
+
+        def __init__(self, *args, placeholder_type_fn, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._placeholder_type_fn = placeholder_type_fn
 
     def __init__(self, storage: PresentationStorage, cache_key: CacheKey, shape_xml_getter: Lazy, slide_like):
         super().__init__(storage, cache_key, shape_xml_getter, slide_like)
+        self._placeholder_type_fn = lambda: self.as_placeholder.placeholder_type
 
     @property
     def as_text(self) -> TextShape:
-        return TextShape(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like)
+        return self._TextShapeOverrided(self._storage, self._storage_cache_key, self._shape_xml_getter, self._slide_like,
+                                        placeholder_type_fn=self._placeholder_type_fn)
 
     @property
     def as_placeholder(self) -> PlaceholderShape:

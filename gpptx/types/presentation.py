@@ -37,9 +37,13 @@ class Presentation(CacheDecoratableXmlNode):
     def slide_width(self) -> Optional[Emu]:
         if self._sld_sz is not None:
             return Emu(self._sld_sz.get('cx'))
-        if self._do_use_defaults_when_null:
-            return Emu(0)
+        if self.do_use_defaults_when_null:
+            return self._default_slide_width
         return None
+
+    @property
+    def _default_slide_width(self) -> Emu:
+        return Emu(0)
 
     @slide_width.serializer
     def slide_width(self, v: Emu) -> int:
@@ -53,9 +57,13 @@ class Presentation(CacheDecoratableXmlNode):
     def slide_height(self) -> Optional[Emu]:
         if self._sld_sz is not None:
             return Emu(self._sld_sz.get('cy'))
-        if self._do_use_defaults_when_null:
-            return Emu(0)
+        if self.do_use_defaults_when_null:
+            return self._default_slide_height
         return None
+
+    @property
+    def _default_slide_height(self) -> Emu:
+        return Emu(0)
 
     @slide_height.serializer
     def slide_height(self, v: Emu) -> int:

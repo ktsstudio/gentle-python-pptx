@@ -269,8 +269,13 @@ class Paragraph(CacheDecoratableXmlNode):
             elif align_str == 'r':
                 return HorizontalAlign.RIGHT
         if self.do_use_defaults_when_null:
-            return HorizontalAlign.LEFT
+            return self._default_align
         return None
+
+    @property
+    def _default_align(self) -> HorizontalAlign:
+        # noinspection PyProtectedMember
+        return self._text_frame._default_horizontal_align
 
     @align.serializer
     def align(self, v: HorizontalAlign) -> int:
@@ -293,8 +298,12 @@ class Paragraph(CacheDecoratableXmlNode):
             if val_str is not None:
                 return float(val_str)
         if self.do_use_defaults_when_null:
-            return 1.00001
+            return self._default_line_height
         return None
+
+    @property
+    def _default_line_height(self) -> float:
+        return 1.00001
 
     @line_height.serializer
     def line_height(self, v: Union[float, Emu]) -> Union[float, int]:
@@ -319,8 +328,12 @@ class Paragraph(CacheDecoratableXmlNode):
             if level_str is not None:
                 return int(level_str)
         if self.do_use_defaults_when_null:
-            return 0
+            return self._default_level
         return None
+
+    @property
+    def _default_level(self) -> int:
+        return 0
 
     @cache_persist_property
     def level_width(self) -> Optional[Emu]:
@@ -329,8 +342,12 @@ class Paragraph(CacheDecoratableXmlNode):
             if level_width_str is not None:
                 return Emu(level_width_str)
         if self.do_use_defaults_when_null:
-            return Emu.from_px(32)
+            return self._default_level_width
         return None
+
+    @property
+    def _default_level_width(self) -> Emu:
+        return Emu.from_px(32)
 
     @level_width.serializer
     def level_width(self, v: Emu) -> int:
@@ -348,8 +365,12 @@ class Paragraph(CacheDecoratableXmlNode):
             if val is not None:
                 return Emu.from_centripoints(val)
         if self.do_use_defaults_when_null:
-            return Emu(0)
+            return self._default_margin_top
         return None
+
+    @property
+    def _default_margin_top(self) -> Emu:
+        return Emu(0)
 
     @margin_top.serializer
     def margin_top(self, v: Emu) -> int:
@@ -367,8 +388,12 @@ class Paragraph(CacheDecoratableXmlNode):
             if val is not None:
                 return Emu.from_centripoints(val)
         if self.do_use_defaults_when_null:
-            return Emu(0)
+            return self._default_margin_bottom
         return None
+
+    @property
+    def _default_margin_bottom(self) -> Emu:
+        return Emu(0)
 
     @margin_bottom.serializer
     def margin_bottom(self, v: Emu) -> int:
@@ -506,8 +531,12 @@ class TextFrame(CacheDecoratableXmlNode):
             if l_ins_str is not None:
                 return Emu(l_ins_str)
         if self.do_use_defaults_when_null:
-            return Emu(0)
+            return self._default_margin_left
         return None
+
+    @property
+    def _default_margin_left(self) -> Emu:
+        return Emu(0)
 
     @margin_left.serializer
     def margin_left(self, v: Emu) -> int:
@@ -524,8 +553,12 @@ class TextFrame(CacheDecoratableXmlNode):
             if t_ins_str is not None:
                 return Emu(t_ins_str)
         if self.do_use_defaults_when_null:
-            return Emu(0)
+            return self._default_margin_top
         return None
+
+    @property
+    def _default_margin_top(self) -> Emu:
+        return Emu(0)
 
     @margin_top.serializer
     def margin_top(self, v: Emu) -> int:
@@ -542,8 +575,12 @@ class TextFrame(CacheDecoratableXmlNode):
             if r_ins_str is not None:
                 return Emu(r_ins_str)
         if self.do_use_defaults_when_null:
-            return Emu(0)
+            return self._default_margin_right
         return None
+
+    @property
+    def _default_margin_right(self) -> Emu:
+        return Emu(0)
 
     @margin_right.serializer
     def margin_right(self, v: Emu) -> int:
@@ -560,8 +597,12 @@ class TextFrame(CacheDecoratableXmlNode):
             if b_ins_str is not None:
                 return Emu(b_ins_str)
         if self.do_use_defaults_when_null:
-            return Emu(0)
+            return self._default_margin_bottom
         return None
+
+    @property
+    def _default_margin_bottom(self) -> Emu:
+        return Emu(0)
 
     @margin_bottom.serializer
     def margin_bottom(self, v: Emu) -> int:
@@ -583,8 +624,13 @@ class TextFrame(CacheDecoratableXmlNode):
                 elif anchor_str == 'b':
                     return VerticalAlign.BOTTOM
         if self.do_use_defaults_when_null:
-            return VerticalAlign.TOP
+            return self._default_vertical_align
         return None
+
+    @property
+    def _default_vertical_align(self) -> VerticalAlign:
+        # noinspection PyUnresolvedReferences
+        return self._shape._default_vertical_align
 
     @vertical_align.serializer
     def vertical_align(self, v: VerticalAlign) -> int:
@@ -604,8 +650,17 @@ class TextFrame(CacheDecoratableXmlNode):
                 elif wrap_str == 'node':
                     return False
         if self.do_use_defaults_when_null:
-            return True
+            return self._default_do_word_wrap
         return None
+
+    @property
+    def _default_do_word_wrap(self) -> bool:
+        return True
+
+    @property
+    def _default_horizontal_align(self) -> HorizontalAlign:
+        # noinspection PyUnresolvedReferences
+        return self._shape._default_horizontal_align
 
     @cache_local_property
     def _def_r_pr(self) -> Optional[ElementTree]:
