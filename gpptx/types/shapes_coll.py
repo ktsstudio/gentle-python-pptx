@@ -211,10 +211,7 @@ class ShapesCollection(CacheDecoratable):
         return new_shape_id
 
     @dangerous_method
-    def delete(self, shape_id: int, do_affect_xml: bool = True, i_wont_save_cache: bool = False) -> None:
-        if not do_affect_xml:
-            assert i_wont_save_cache
-
+    def delete(self, shape_id: int, do_affect_xml: bool = True) -> None:
         # find
         shape_index = self.return_index_direct(shape_id)
 
@@ -229,7 +226,7 @@ class ShapesCollection(CacheDecoratable):
         clear_decorator_cache(self, 'flatten')
         clear_decorator_cache(self, 'flatten_as_dict')
 
-        self._shape_xml_getters.pop(shape_index)
+        self._shape_xml_getters.pop(shape_index, do_ghost_delete=(not do_affect_xml))
         self._storage.cacher.delete_from_any_cache(self._storage_cache_key.make_son(str(shape_index)))
 
     @dangerous_method

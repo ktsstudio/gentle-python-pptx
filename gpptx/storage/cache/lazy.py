@@ -37,17 +37,20 @@ class LazyByFunction(Lazy):
 
 
 class LazyList:
-    __slots__ = ('_create_fn', '_buffer', '_length', '_deleted_indexes',
-                 '_notify_new_buffer_fn', '_notify_new_length_fn', '_notify_new_deleted_indexes_fn')
+    __slots__ = ('_create_fn', '_buffer', '_length', '_deleted_indexes', '_ghost_deleted_indexes',
+                 '_notify_new_buffer_fn', '_notify_new_length_fn',
+                 '_notify_new_deleted_indexes_fn', '_notify_new_ghost_deleted_indexes_fn')
 
     def __init__(self, create_fn: Callable[[], List[Any]]):
         self._create_fn = create_fn
         self._buffer: Optional[List[Any]] = None
         self._length: Optional[int] = None
         self._deleted_indexes: Set[int] = set()
+        self._ghost_deleted_indexes: Set[int] = set()
         self._notify_new_buffer_fn: Optional[Callable[[List[Any]], None]] = None
         self._notify_new_length_fn: Optional[Callable[[int], None]] = None
         self._notify_new_deleted_indexes_fn: Optional[Callable[[Set[int]], None]] = None
+        self._notify_new_ghost_deleted_indexes_fn: Optional[Callable[[Set[int]], None]] = None
 
     def __iter__(self) -> Iterator[Lazy]:
         for i in self.iter_indexes():
@@ -55,23 +58,28 @@ class LazyList:
 
     def __len__(self) -> int:
         self._ensure_length()
-        return self._length - len(self._deleted_indexes)
+        return self._length - len(self._deleted_indexes) - len(self._ghost_deleted_indexes)
 
     def __getitem__(self, index: int) -> Lazy:
-        assert index not in self._deleted_indexes
+        assert index not in self._deleted_indexes and index not in self._ghost_deleted_indexes
         return LazyByListItem(self, index)
 
     def supply_and_bind_cache(self,
-                              buffer: Optional[List[Any]], length: Optional[int], deleted_indexes: Optional[Set[int]],
+                              buffer: Optional[List[Any]], length: Optional[int],
+                              deleted_indexes: Optional[Set[int]],
+                              ghost_deleted_indexes: Optional[Set[int]],
                               notify_new_buffer_fn: Callable[[List[Any]], None],
                               notify_new_length_fn: Callable[[int], None],
-                              notify_new_deleted_indexes_fn: Callable[[Set[int]], None]) -> None:
+                              notify_new_deleted_indexes_fn: Callable[[Set[int]], None],
+                              notify_new_ghost_deleted_indexes_fn: Callable[[Set[int]], None]) -> None:
         if buffer is not None:
             self._buffer = buffer
         if length is not None:
             self._length = length
         if deleted_indexes is not None:
             self._deleted_indexes = deleted_indexes
+        if ghost_deleted_indexes is not None:
+            self._ghost_deleted_indexes = ghost_deleted_indexes
 
         if self._buffer is not None and self._length is not None:
             assert len(self._buffer) == self._length
@@ -79,11 +87,12 @@ class LazyList:
         self._notify_new_buffer_fn = notify_new_buffer_fn
         self._notify_new_length_fn = notify_new_length_fn
         self._notify_new_deleted_indexes_fn = notify_new_deleted_indexes_fn
+        self._notify_new_ghost_deleted_indexes_fn = notify_new_ghost_deleted_indexes_fn
 
     def iter_indexes(self) -> Iterator[int]:
         self._ensure_length()
         for i in range(self._length):
-            if i in self._deleted_indexes:
+            if i in self._deleted_indexes or i in self._ghost_deleted_indexes:
                 continue
             yield i
 
@@ -99,17 +108,23 @@ class LazyList:
         self._notify_new_buffer()
         self._notify_new_length()
 
-    def pop(self, index: int) -> None:
-        self._deleted_indexes.add(index)
-        self._notify_new_deleted_indexes()
+    def pop(self, index: int, do_ghost_delete: bool = False) -> None:
+        if do_ghost_delete:
+            self._ghost_deleted_indexes.add(index)
+            self._notify_new_ghost_deleted_indexes()
+        else:
+            self._deleted_indexes.add(index)
+            self._notify_new_deleted_indexes()
 
     def clear(self):
         self._buffer = list()
         self._length = 1
         self._deleted_indexes = set()
+        self._ghost_deleted_indexes = set()
         self._notify_new_buffer()
         self._notify_new_length()
         self._notify_new_deleted_indexes()
+        self._notify_new_ghost_deleted_indexes()
 
     @property
     def len_with_holes(self):
@@ -150,6 +165,10 @@ class LazyList:
     def _notify_new_deleted_indexes(self):
         if self._notify_new_deleted_indexes_fn:
             self._notify_new_deleted_indexes_fn(self._deleted_indexes)
+
+    def _notify_new_ghost_deleted_indexes(self):
+        if self._notify_new_ghost_deleted_indexes_fn:
+            self._notify_new_ghost_deleted_indexes_fn(self._ghost_deleted_indexes)
 
 
 class LazyByListItem(Lazy):

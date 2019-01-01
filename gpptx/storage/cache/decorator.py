@@ -124,7 +124,7 @@ class _BaseCacheDecorator(ABC):
         if not do_exist:
             track_miss_fn()
             # noinspection PyProtectedMember
-            if fn_self._storage.do_log_stats:
+            if fn_self._storage.do_log_stats and self._do_use_persisting_cache:
                 # noinspection PyProtectedMember
                 _logger.debug(f'Cache miss for {call_cache_key}. '
                               f'Hits: '
@@ -276,6 +276,7 @@ class _CacheDecoratorLazyListHelperProperty:
         buffer_key = main_key.make_son('buffer')
         length_key = main_key.make_son('length')
         deleted_indexes_key = main_key.make_son('deleted_indexes')
+        ghost_deleted_indexes_key = main_key.make_son('ghost_deleted_indexes')
 
         # noinspection PyProtectedMember
         buffer, _ = fn_self._storage.cacher.get_from_local_cache(buffer_key)
@@ -285,6 +286,10 @@ class _CacheDecoratorLazyListHelperProperty:
         deleted_indexes, _ = fn_self._storage.cacher.get_from_persisting_cache(deleted_indexes_key)
         if deleted_indexes is not None:
             deleted_indexes = set(deleted_indexes)
+        # noinspection PyProtectedMember
+        ghost_deleted_indexes, _ = fn_self._storage.cacher.get_from_local_cache(ghost_deleted_indexes_key)
+        if ghost_deleted_indexes is not None:
+            ghost_deleted_indexes = set(ghost_deleted_indexes)
 
         def notify_new_buffer(new_buffer: List[Any]) -> None:
             # noinspection PyProtectedMember
@@ -292,15 +297,20 @@ class _CacheDecoratorLazyListHelperProperty:
 
         def notify_new_length(new_length: int) -> None:
             # noinspection PyProtectedMember
-            fn_self._storage.cacher.cache_persist(buffer_key, new_length)
+            fn_self._storage.cacher.cache_persist(length_key, new_length)
 
         def notify_new_deleted_indexes(new_deleted_indexes: Set[int]) -> None:
             # noinspection PyProtectedMember
-            fn_self._storage.cacher.cache_persist(buffer_key, list(new_deleted_indexes))
+            fn_self._storage.cacher.cache_persist(deleted_indexes_key, list(new_deleted_indexes))
+
+        def notify_new_ghost_deleted_indexes(new_ghost_deleted_indexes: Set[int]) -> None:
+            # noinspection PyProtectedMember
+            fn_self._storage.cacher.cache_local(ghost_deleted_indexes_key, list(new_ghost_deleted_indexes))
 
         lazy_list = self._fn(fn_self)
-        lazy_list.supply_and_bind_cache(buffer, length, deleted_indexes,
-                                        notify_new_buffer, notify_new_length, notify_new_deleted_indexes)
+        lazy_list.supply_and_bind_cache(buffer, length, deleted_indexes, ghost_deleted_indexes,
+                                        notify_new_buffer, notify_new_length,
+                                        notify_new_deleted_indexes, notify_new_ghost_deleted_indexes)
         return lazy_list
 
 

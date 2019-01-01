@@ -73,7 +73,13 @@ class Run(CacheDecoratableXmlNode):
         latin_xml = self._get_elem('a:latin', do_recursive_find=self.do_use_defaults_when_null)
         if latin_xml is not None:
             return latin_xml.get('typeface')
+        if self.do_use_defaults_when_null:
+            return self._default_font_name
         return None
+
+    @property
+    def _default_font_name(self) -> str:
+        return 'Calibri'
 
     @cache_persist_property
     def font_size(self) -> Optional[Emu]:
@@ -241,10 +247,7 @@ class RunCollection(CacheDecoratable):
         return new_run_index
 
     @dangerous_method
-    def delete_run(self, index: int, do_affect_xml: bool = True, i_wont_save_cache: bool = False) -> None:
-        if not do_affect_xml:
-            assert i_wont_save_cache
-
+    def delete_run(self, index: int, do_affect_xml: bool = True) -> None:
         # delete
         if do_affect_xml:
             run_xml = self._run_xml_getters[index]()
@@ -252,7 +255,7 @@ class RunCollection(CacheDecoratable):
             self._paragraph.save_xml()
 
         # update cache
-        self._run_xml_getters.pop(index)
+        self._run_xml_getters.pop(index, do_ghost_delete=(not do_affect_xml))
         self._storage.cacher.delete_from_any_cache(self._storage_cache_key.make_son(str(index)))
 
 
@@ -496,10 +499,7 @@ class ParagraphCollection(CacheDecoratable):
         return new_paragraph_index
 
     @dangerous_method
-    def delete_paragraph(self, index: int, do_affect_xml: bool = True, i_wont_save_cache: bool = False) -> None:
-        if not do_affect_xml:
-            assert i_wont_save_cache
-
+    def delete_paragraph(self, index: int, do_affect_xml: bool = True) -> None:
         # delete
         if do_affect_xml:
             paragraph_xml = self._paragraph_xml_getters[index]()
@@ -507,7 +507,7 @@ class ParagraphCollection(CacheDecoratable):
             self._text_frame.save_xml()
 
         # update cache
-        self._paragraph_xml_getters.pop(index)
+        self._paragraph_xml_getters.pop(index, do_ghost_delete=(not do_affect_xml))
         self._storage.cacher.delete_from_any_cache(self._storage_cache_key.make_son(str(index)))
 
     @dangerous_method
