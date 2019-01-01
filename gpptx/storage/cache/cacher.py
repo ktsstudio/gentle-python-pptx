@@ -47,13 +47,9 @@ class CacheKey:
         return CacheKey(name, parent=self)
 
 
-class CachePrefixTreeDict(dict):
-    pass
-
-
 class CachePrefixTree:
     def __init__(self):
-        self._tree = CachePrefixTreeDict()
+        self._tree = dict()
 
     def __getitem__(self, key: CacheKey) -> Tuple[Any, bool]:
         # reverse linked list using recursion
@@ -89,7 +85,7 @@ class CachePrefixTree:
             if k != key:
                 inner_branch = branch.get(k.name)
                 if inner_branch is None:
-                    inner_branch = CachePrefixTreeDict()
+                    inner_branch = dict()
                     branch[k.name] = inner_branch
                 return inner_branch
             else:
@@ -129,7 +125,7 @@ class CachePrefixTree:
             if k != key:
                 inner_branch = branch.get(k.name)
                 if inner_branch is None:
-                    inner_branch = CachePrefixTreeDict()
+                    inner_branch = dict()
                     branch[k.name] = inner_branch
                 return inner_branch
             else:

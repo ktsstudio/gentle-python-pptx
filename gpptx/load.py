@@ -8,7 +8,7 @@ from gpptx.types.presentation import Presentation
 
 
 class PresentationContainer:
-    def __init__(self, file: Union[BinaryIO, BytesIO] = None, cache: Dict[str, Any] = None):
+    def __init__(self, file: Union[BinaryIO, BytesIO] = None, cache: Dict[str, Any] = None, do_log_stats: bool = False):
         loader = Loader()
         if file is not None:
             loader.load(file)
@@ -17,7 +17,7 @@ class PresentationContainer:
         if cache is not None:
             cacher.load_persisting_cache(cache)
 
-        self._storage = PresentationStorage(loader, cacher)
+        self._storage = PresentationStorage(loader, cacher, do_log_stats=do_log_stats)
         self._root_cache_key = CacheKey('')
 
     def save(self, dest: Union[BinaryIO, BytesIO]) -> None:

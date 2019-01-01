@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='gentle-python-pptx',
-    version='0.4.1',
+    version='0.4.2',
 
     description='Processes pptx presentations, optimized for repetitive processing large ones',
     long_description=open('README.md').read(),

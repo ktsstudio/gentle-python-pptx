@@ -1,3 +1,4 @@
+import logging
 from abc import ABC
 from functools import update_wrapper, WRAPPER_ASSIGNMENTS
 from typing import Callable, List, Any, Dict, Collection, Type, Set
@@ -5,6 +6,8 @@ from typing import Callable, List, Any, Dict, Collection, Type, Set
 from gpptx.storage.cache.cacher import CacheKey
 from gpptx.storage.cache.lazy import LazyList, Lazy, LazyByFunction
 from gpptx.storage.storage import PresentationStorage
+
+_logger = logging.getLogger(__name__)
 
 
 class CacheDecoratable(ABC):
@@ -112,12 +115,28 @@ class _BaseCacheDecorator(ABC):
     def _get_from_cache(self, call_cache_key: CacheKey, fn_self: CacheDecoratable) -> [Any, bool]:
         # noinspection PyProtectedMember
         get_fn = self._get_cache_get_fn(fn_self._storage)
+        # noinspection PyProtectedMember
+        track_hit_fn = self._get_cache_track_hit_fn(fn_self._storage)
+        # noinspection PyProtectedMember
+        track_miss_fn = self._get_cache_track_miss_fn(fn_self._storage)
 
         value, do_exist = get_fn(call_cache_key)
         if not do_exist:
+            track_miss_fn()
+            # noinspection PyProtectedMember
+            if fn_self._storage.do_log_stats:
+                # noinspection PyProtectedMember
+                _logger.debug(f'Cache miss for {call_cache_key}. '
+                              f'Hits: '
+                              f'p {fn_self._storage.stats.persisting_cache_hits}, '
+                              f'l {fn_self._storage.stats.local_cache_hits}. '
+                              f'Misses: '
+                              f'p {fn_self._storage.stats.persisting_cache_misses}, '
+                              f'l {fn_self._storage.stats.local_cache_misses}')
             return None, False
         if self._unserializer_fn is not None and value is not None:
             value = self._unserializer_fn(fn_self, value)
+        track_hit_fn()
         return value, True
 
     def _save_to_cache(self, call_cache_key: CacheKey, value: Any, fn_self: CacheDecoratable) -> None:
@@ -138,6 +157,18 @@ class _BaseCacheDecorator(ABC):
             return storage.cacher.cache_persist
         else:
             return storage.cacher.cache_local
+
+    def _get_cache_track_hit_fn(self, storage: PresentationStorage) -> Callable:
+        if self._do_use_persisting_cache:
+            return storage.stats.track_persisting_cache_hit
+        else:
+            return storage.stats.track_local_cache_hit
+
+    def _get_cache_track_miss_fn(self, storage: PresentationStorage) -> Callable:
+        if self._do_use_persisting_cache:
+            return storage.stats.track_persisting_cache_miss
+        else:
+            return storage.stats.track_local_cache_miss
 
 
 class _CacheDecoratorMethod(_BaseCacheDecorator):
