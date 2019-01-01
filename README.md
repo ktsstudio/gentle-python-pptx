@@ -13,8 +13,8 @@ The library caches all properties calculated from the xml and allows to save the
 `gentle-python-pptx` handles but `python-pptx` don't:
 - Colors
 - Nested text formatting
-- Shapes removal
-- Slides removal
+- Shapes adding/removal/duplication
+- Slides adding/removal/duplication
 
 `python-pptx` handles but `gentle-python-pptx` don't:
 - Specification-right pptx parsing
