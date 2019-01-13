@@ -13,7 +13,6 @@ from gpptx.storage.storage import PresentationStorage
 from gpptx.types.color import Color, CustomSetColor
 from gpptx.types.units import Emu
 from gpptx.types.xml_node import CacheDecoratableXmlNode
-from gpptx.util.annotations import dangerous_method
 from gpptx.util.list import first_or_none
 
 
@@ -177,7 +176,7 @@ class Run(CacheDecoratableXmlNode):
         if self.do_use_defaults_when_null:
             theme = self.paragraph.text_frame.shape.slide.theme
             return CustomSetColor(theme.color_rgbs['tx1'])
-        
+
         return None
 
     def _get_attrib(self, name: str, do_recursive_find: bool) -> Any:
@@ -226,7 +225,6 @@ class RunCollection(CacheDecoratable):
     def __len__(self):
         return len(self._run_xml_getters)
 
-    @dangerous_method
     def add_run(self, new_xml: ElementTree = None) -> int:
         # create
         if new_xml is None:
@@ -246,7 +244,6 @@ class RunCollection(CacheDecoratable):
         new_run_index = self._run_xml_getters.len_with_holes - 1
         return new_run_index
 
-    @dangerous_method
     def delete_run(self, index: int, do_affect_xml: bool = True) -> None:
         # delete
         if do_affect_xml:
@@ -474,7 +471,6 @@ class ParagraphCollection(CacheDecoratable):
     def __len__(self):
         return len(self._paragraph_xml_getters)
 
-    @dangerous_method
     def add_paragraph(self, new_xml: ElementTree = None, do_auto_new_xml_with_run: bool = True) -> int:
         # create
         if new_xml is None:
@@ -498,7 +494,6 @@ class ParagraphCollection(CacheDecoratable):
         new_paragraph_index = self._paragraph_xml_getters.len_with_holes - 1
         return new_paragraph_index
 
-    @dangerous_method
     def delete_paragraph(self, index: int, do_affect_xml: bool = True) -> None:
         # delete
         if do_affect_xml:
@@ -510,7 +505,6 @@ class ParagraphCollection(CacheDecoratable):
         self._paragraph_xml_getters.pop(index, do_ghost_delete=(not do_affect_xml))
         self._storage.cacher.delete_from_any_cache(self._storage_cache_key.make_son(str(index)))
 
-    @dangerous_method
     def clear(self) -> None:
         # delete
         for paragraph_xml_getter in self._paragraph_xml_getters:

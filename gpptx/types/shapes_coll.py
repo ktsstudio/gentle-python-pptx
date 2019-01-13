@@ -13,7 +13,6 @@ from gpptx.types.image import RasterImage, VectorImage
 from gpptx.types.shape import Shape, GroupShape, ShapeType, TextShape, PatternType, ImageShape, \
     PlaceholderShape, UnknownShape, PlaceholderType, ImageAndPatternShapeDual, \
     TextAndPlaceholderShapeDual, ImageAndPlaceholderShapeDual, TextAndImageAndPatternShapeDual
-from gpptx.util.annotations import dangerous_method
 
 
 class ShapesCollection(CacheDecoratable):
@@ -189,7 +188,6 @@ class ShapesCollection(CacheDecoratable):
     def flatten_as_dict(self, keep_groups: bool = True, with_layout: bool = False) -> Dict[int, Shape]:
         return {shape.shape_id: shape for shape in self.flatten(keep_groups=keep_groups, with_layout=with_layout)}
 
-    @dangerous_method
     def add(self, new_xml: ElementTree) -> int:
         # change shape id
         last_shape_id = self.last_shape_id
@@ -210,7 +208,6 @@ class ShapesCollection(CacheDecoratable):
 
         return new_shape_id
 
-    @dangerous_method
     def delete(self, shape_id: int, do_affect_xml: bool = True) -> None:
         # find
         shape_index = self.return_index_direct(shape_id)
@@ -229,7 +226,6 @@ class ShapesCollection(CacheDecoratable):
         self._shape_xml_getters.pop(shape_index, do_ghost_delete=(not do_affect_xml))
         self._storage.cacher.delete_from_any_cache(self._storage_cache_key.make_son(str(shape_index)))
 
-    @dangerous_method
     def duplicate(self, shape_id: int) -> int:
         shape_index = self.return_index_direct(shape_id)
         shape = self.make_shape(shape_index, fast=True)
